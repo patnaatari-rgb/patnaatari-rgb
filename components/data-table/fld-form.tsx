@@ -81,7 +81,8 @@ export function FldForm({ trail, backHref, id, initialView }: FldFormProps) {
     fetchRows("sub-category", setSubCategoryRows);
     fetchRows("crop", setCropRows);
     fetchRows("fld-thematic-area", setThematicAreaRows);
-    fetch("/api/staff-options")
+    /** Client direction, 2026-09-13: "Name of SMS/KVK Head" means only SMS/Head, not any staff member - see /api/staff-options' own comment. */
+    fetch("/api/staff-options?role=sms-head")
       .then((res) => (res.ok ? res.json() : { rows: [] }))
       .then((data) => setStaffOptions(uniqueNonEmpty((data.rows ?? []).map((r: NamedRow) => r.name))))
       .catch(() => {});

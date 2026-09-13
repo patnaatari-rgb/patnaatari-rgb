@@ -1809,8 +1809,8 @@ const achievements = group("achievements", "Achievements", [
       // Same missing intro heading as Awards (KVK) above (confirmed live, 2026-09-03).
       { key: "formIntroHeading", label: "Recognition received by Head/Scientist", fieldKind: "section-heading", formOnly: true, formOrder: 0 },
       { key: "reportingDate", label: "Reporting Date", formOnly: true, fieldKind: "date", required: true },
-      /** Real staff dropdown (audit finding, 2026-09-02) - the reference shows a real "--Please Select Scientist--" dropdown of the KVK's own staff, not free text. */
-      { key: "headScientist", label: "Scientist", formLabel: "Head/Scientist", sourceMaster: { master: "__staff__", optionKey: "name" }, required: true },
+      /** Real staff dropdown (audit finding, 2026-09-02) - the reference shows a real "--Please Select Scientist--" dropdown of the KVK's own staff, not free text. Restricted to SMS/Head only (client direction, 2026-09-13) - same reasoning as OFT's/FLD's own "Name of SMS/KVK Head". */
+      { key: "headScientist", label: "Scientist", formLabel: "Head/Scientist", sourceMaster: { master: "__staff_sms_head__", optionKey: "name" }, required: true },
       { key: "award", label: "Award", formLabel: "Name of the Award", required: true },
       { key: "amount", label: "Amount", required: true },
       { key: "achievement", label: "Achievement", required: true },
@@ -2975,12 +2975,12 @@ const performanceIndicators = group(
         // Real Add form field confirmed live (atariams.org/financial-performance/project-budget-details/create, 2026-09-04) - a Financial-Year date range, not required, not a table column.
         { key: "startDate", label: "Start Date", fieldKind: "date", formOnly: true },
         { key: "endDate", label: "End Date", fieldKind: "date", formOnly: true },
-        // Real reference (2026-09-04) - a fixed dropdown, not free text.
-        { key: "projectName", label: "Project Name", required: true, staticOptions: ["CFLD Oilseed", "CFLD Pulses", "Model Village Oilseed", "Model Village Pulses", "NICRA", "ARYA", "FPO", "Natural Farming", "DRMR", "NARI", "IIPR", "TSP", "SCSP", "SAP", "Others"] },
+        // Real reference (2026-09-04) - a fixed dropdown, not free text. Last option was "Others" there (verified live) - client direction, 2026-09-13: "Other" instead, everywhere in this app, even where it means deviating from the live reference's own wording.
+        { key: "projectName", label: "Project Name", required: true, staticOptions: ["CFLD Oilseed", "CFLD Pulses", "Model Village Oilseed", "Model Village Pulses", "NICRA", "ARYA", "FPO", "Natural Farming", "DRMR", "NARI", "IIPR", "TSP", "SCSP", "SAP", "Other"] },
         // Real reference marks this required (asterisk) and it isn't a table column there (own table: KVK/Project Name/Funding Agency/Budget Estimate/Budget Allocated/Budget Released/Expenditure/Unspent Balance only, no Account Number) - hidden from ours to match.
         { key: "accountNumber", label: "Account Number", required: true, formOnly: true },
-        // Real reference (2026-09-04) - a fixed dropdown, not free text.
-        { key: "fundingAgency", label: "Funding Agency", required: true, staticOptions: ["ICAR", "State Govt. Ministry of A&FW", "Central Govt.", "Others"] },
+        // Real reference (2026-09-04) - a fixed dropdown, not free text. Same "Other" not "Others" direction as projectName above.
+        { key: "fundingAgency", label: "Funding Agency", required: true, staticOptions: ["ICAR", "State Govt. Ministry of A&FW", "Central Govt.", "Other"] },
         { key: "budgetEstimate", label: "Budget Estimate", required: true },
         { key: "budgetAllocated", label: "Budget Allocated", required: true },
         { key: "budgetReleased", label: "Budget Released", required: true },

@@ -111,6 +111,8 @@ const sourceMasterCache = new Map<string, Promise<Record<string, string>[]>>();
 const STAFF_SOURCE = "__staff__";
 const PER_KVK_OPTION_ENDPOINTS: Record<string, string> = {
   [STAFF_SOURCE]: "/api/staff-options",
+  /** Client direction, 2026-09-13: Scientist Award's "Scientist"/"Head/Scientist" field means only SMS or KVK Head too, same restriction as OFT's and FLD's own "Name of SMS/KVK Head" (which use this same /api/staff-options?role=sms-head filter directly, being bespoke forms) - every other __staff__ field (Extension Activities, Training's Course Co-ordinator, HRD, ...) stays the full roster. */
+  __staff_sms_head__: "/api/staff-options?role=sms-head",
   __vehicle__: "/api/vehicle-options",
   __equipment__: "/api/equipment-options",
   __fld__: "/api/fld-options",

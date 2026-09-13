@@ -82,7 +82,6 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
   const [thematicAreaRows, setThematicAreaRows] = useState<ThematicAreaRow[]>([]);
   const [subjectRows, setSubjectRows] = useState<MasterRow[]>([]);
   const [staffOptions, setStaffOptions] = useState<string[]>([]);
-  const [fundingSourceRows, setFundingSourceRows] = useState<MasterRow[]>([]);
   const [seasonOptions, setSeasonOptions] = useState<string[]>([]);
   const [disciplineRows, setDisciplineRows] = useState<MasterRow[]>([]);
   const [realYears, setRealYears] = useState<string[]>([]);
@@ -108,13 +107,10 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
       .then((res) => (res.ok ? res.json() : { rows: [] }))
       .then((data) => setSubjectRows(data.rows ?? []))
       .catch(() => {});
-    fetch("/api/staff-options")
+    /** Client direction, 2026-09-13: "Name of SMS/KVK Head" means only SMS/Head, not any staff member - see /api/staff-options' own comment. */
+    fetch("/api/staff-options?role=sms-head")
       .then((res) => (res.ok ? res.json() : { rows: [] }))
       .then((data) => setStaffOptions(uniqueNonEmpty((data.rows ?? []).map((r: Record<string, string>) => r.name))))
-      .catch(() => {});
-    fetch("/api/master-options?slug=funding-source")
-      .then((res) => (res.ok ? res.json() : { rows: [] }))
-      .then((data) => setFundingSourceRows(data.rows ?? []))
       .catch(() => {});
     /** Real Season Master (audit finding, 2026-09-02 - the hardcoded Kharif/Rabi/Zaid list didn't match the real master's actual values, Kharif/Rabi/Summer). */
     fetch("/api/master-options?slug=season")
@@ -333,9 +329,11 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
     type: "text" | "number" | "date" = "text",
     /** For a completion/end date - can't be before this date. */
     min?: string,
+    /** Client report, 2026-09-13: "Title of On Farm Trial (OFT)" - a real title runs long, and this field shared the same ~320px-max column every select/date field in this form uses, so most of it stayed hidden while typing. `col-[1/-1]` (same full-row-span convention master-form-fields.tsx already uses) instead of a wider fixed width, so it still adapts to the row's real available space. */
+    fullWidth?: boolean,
   ) {
     return (
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", fullWidth && "col-[1/-1]")}>
         <Label htmlFor={idAttr}>
           {label} {required && <span className="text-destructive">*</span>}
         </Label>
@@ -409,7 +407,7 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
           <OtherAwareSelect id="oft-subject" label="OFT Subject" required value={oftSubject} onChange={setOftSubject} rows={subjectRows} optionKey="subjectName" />
           <OtherAwareSelect id="oft-thematic-area" label="Thematic Area" required value={thematicArea} onChange={setThematicArea} rows={thematicAreaRowsForSubject} allRows={thematicAreaRows} optionKey="thematicArea" />
           <OtherAwareSelect id="oft-discipline" label="Discipline" required value={discipline} onChange={setDiscipline} rows={disciplineRows} optionKey="name" />
-          {textField("oft-title", "Title of On Farm Trial (OFT)", trialOnForm, setTrialOnForm, true)}
+          {textField("oft-title", "Title of On Farm Trial (OFT)", trialOnForm, setTrialOnForm, true, undefined, "text", undefined, true)}
         </div>
 
         <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">
@@ -417,8 +415,10 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
           {selectField("oft-source", "Source of Technology (ICAR/SAU/Other)", sourceOfTechnology, setSourceOfTechnology, SOURCES, true)}
         </div>
 
+        {/** Client direction, 2026-09-13: "Source of Funding" back to plain free text (was a Funding Source master dropdown) - reverting that improvement per this direction, not a mismatch. "Funding Agency Name" moved up beside it from its old standalone row further down the form, per the same direction. */}
         <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">
-          <OtherAwareSelect id="oft-funding-source" label="Source of Funding" required value={sourceOfFunding} onChange={setSourceOfFunding} rows={fundingSourceRows} optionKey="fundingSource" />
+          {textField("oft-funding-source", "Source of Funding", sourceOfFunding, setSourceOfFunding, true)}
+          {textField("oft-funding-agency", "Funding Agency Name", fundingAgency, setFundingAgency)}
           {textField("oft-production-system", "Production System and Thematic Area", productionSystem, setProductionSystem, true)}
         </div>
 
@@ -480,10 +480,6 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
         <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">
           {textField("oft-critical-input", "Critical Input", criticalInput, setCriticalInput, true)}
           {textField("oft-cost", "Cost of OFT", costOfOft, setCostOfOft, true, undefined, "number")}
-        </div>
-
-        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">
-          {textField("oft-funding-agency", "Funding Agency Name", fundingAgency, setFundingAgency)}
         </div>
 
         {id && (

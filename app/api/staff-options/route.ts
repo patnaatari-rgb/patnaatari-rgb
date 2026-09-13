@@ -14,12 +14,29 @@ import { requireSession } from "@/lib/api-auth";
  * staff member in the zone instead, same "aggregate view" convention used
  * elsewhere in this app for Super Admin.
  */
-export async function GET() {
+/**
+ * Client direction, 2026-09-13: OFT's and FLD's own "Name of SMS/KVK Head"
+ * field really does mean only SMS or KVK Head, not any staff member (a
+ * Driver/Assistant/Stenographer showing up there was a real gap) - every
+ * other caller of this endpoint (Extension Activities' Staff, Training's
+ * Course Co-ordinator, HRD, ...) still wants the full roster, so this is an
+ * opt-in `?role=sms-head` filter, not a change to the default. Matched
+ * against the real Sanctioned Post values (Staff.sanctionedPost, sourced
+ * from the Sanctioned Post master) rather than free text.
+ */
+const SMS_HEAD_POSTS = ["SMS (Subject Matter Specialist)", "Senior Scientist & Head"];
+
+export async function GET(request: Request) {
   const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
 
+  const role = new URL(request.url).searchParams.get("role");
+
   const rows = await prisma.staff.findMany({
-    where: auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId },
+    where: {
+      ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }),
+      ...(role === "sms-head" ? { sanctionedPost: { in: SMS_HEAD_POSTS } } : {}),
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
