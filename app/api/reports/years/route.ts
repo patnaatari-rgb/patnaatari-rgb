@@ -9,14 +9,24 @@ import { distinctReportingYears } from "@/lib/report-data";
  * REPORT_YEAR_LIST (current year back 5), which silently made any year
  * outside that fixed window impossible to select even though real data
  * existed for it.
+ *
+ * Optional `?model=<prisma model name>` (client direction, 2026-09-13):
+ * scopes to one specific model's own years - e.g. OFT's own Reporting Year
+ * field should only ever offer years OFT itself has, not every year this
+ * KVK has entered anything in, anywhere in the app. Omit it for the Reports
+ * page's own cross-model checklist, which genuinely wants the union across
+ * everything. Safe by construction against an arbitrary/unknown value -
+ * distinctReportingYears only ever narrows its own hardcoded model maps, it
+ * can't be made to query a model outside them.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
   const isKvkScoped = auth.session.role !== "SUPER_ADMIN";
   const kvkId = isKvkScoped ? auth.session.kvkId ?? undefined : undefined;
+  const model = new URL(request.url).searchParams.get("model") ?? undefined;
 
-  const years = await distinctReportingYears({ kvkId, zoneId: auth.session.zoneId });
+  const years = await distinctReportingYears({ kvkId, zoneId: auth.session.zoneId, model });
   return NextResponse.json({ years });
 }

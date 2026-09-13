@@ -73,6 +73,30 @@ export type MasterColumn = {
   fieldKind?: "checkbox" | "demographic-breakdown" | "date" | "photos" | "nf-parameters" | "calculated" | "section-heading" | "month-quarter-grid";
   /** "calculated" only - the explanatory caption shown under the disabled field (e.g. "Auto-calculated: sum of all participant categories"). */
   helperText?: string;
+  /**
+   * "calculated" only - the other columns' keys this one sums live, in the
+   * form itself, as the user types (not just after save). Real bug, client
+   * report 2026-09-13: the field only ever showed whatever value the record
+   * already had server-side - blank the entire time on a new Add form, only
+   * populated after a save+reload - because MasterFormFields displayed the
+   * raw stored value with no client-side computation at all. The server
+   * still recomputes this column independently from the same source fields
+   * on every save (leaf-record-registry.ts), so this is purely a live
+   * preview - never the value actually submitted.
+   */
+  sumOf?: string[];
+  /**
+   * `key: "reportingYear"` with `staticOptions` only - the Prisma model this
+   * specific Reporting Year field's real years should come from (matching
+   * MODEL_PERIOD_YEAR_FIELD/MODEL_PERIOD_DATE_FIELDS' own keys in
+   * lib/report-data.ts), passed as `/api/reports/years?model=...`. Client
+   * direction, 2026-09-13: every one of these fields used to share one
+   * unscoped "years from every model in the whole app" result - Vehicle
+   * Details' own Reporting Year could offer a year Vehicle Details itself
+   * never had, just because some unrelated leaf did. Required for a correct
+   * per-leaf list; omitting it silently falls back to that old broad union.
+   */
+  yearsModel?: string;
   /** demographic-breakdown only - prepended to DemographicBreakdown's own key convention (e.g. "farmers" -> "farmersGeneralMale") so one form can hold two independent blocks (Farmers + Extension Officials). Omit for a single block. */
   demographicPrefix?: string;
   /** demographic-breakdown only - "grid" renders the flat General/OBC/SC/ST x M/F input grid + total badges (DemographicGrid, confirmed live for Training and FLD's own Farmers Details, 2026-09-02) instead of the default General/OBC/SC/ST table (DemographicBreakdown, confirmed for CFLD/OFT/Technology Week/World Soil Day). Omit for the table. */
@@ -995,17 +1019,19 @@ const aboutKvk = group(
         { key: "sourceOfFunding", label: "Source of Funding", required: true, formOrder: 9 },
       ]),
       /**
-       * The "Total Land with KVK" repeating section at the bottom of the live
-       * reference's Edit KVK form (atariams.org /edit-kvks): each row is a
-       * free-text Item plus its area, entered as "In Ha:". No per-row year
-       * (the form's "Enter Year" is the separate Year of Sanction field) and
-       * no required marks. Kept as its own leaf here - one record per land
-       * row - feeding report 1.3.B. `description` stays a report-only column.
+       * Land Details used to be its own bespoke repeatable "Total Land with
+       * KVK" panel (Item + In Ha, add/remove rows, one save) matching the
+       * live reference's Edit KVK form section - no list, no separate Add
+       * New. The client asked for it to match every sibling leaf instead: a
+       * real list with its own Add New/Edit pages (client direction,
+       * 2026-09-13), so it's a plain leaf now like Infrastructure Details
+       * right above it. One record per land row, feeding report 1.3.B.
+       * `description` stays a report-only column.
        */
       leaf("land-details", "Land Details", [
         { key: "kvk", label: "KVK" },
-        { key: "item", label: "Item" },
-        { key: "areaHa", label: "In Ha" },
+        { key: "item", label: "Item", required: true, formOrder: 1 },
+        { key: "areaHa", label: "In Ha", required: true, formOrder: 2 },
       ]),
       /** Real columns confirmed live at /forms/about-kvk/infrastructure/staff-quarters. */
       leaf("staff-quarters", "Staff Quarters", [
@@ -1083,6 +1109,7 @@ const aboutKvk = group(
           formOrder: 1,
           placeholder: "Select",
           staticOptions: Array.from({ length: 4 }, (_, i) => String(new Date().getFullYear() - i)),
+          yearsModel: "vehicleStatus",
         },
         { key: "kvk", label: "KVK" },
         {
@@ -1196,6 +1223,7 @@ const aboutKvk = group(
           formOrder: 1,
           placeholder: "Select",
           staticOptions: Array.from({ length: 4 }, (_, i) => String(new Date().getFullYear() - i)),
+          yearsModel: "equipmentStatus",
         },
         { key: "kvk", label: "KVK" },
         {
@@ -1321,7 +1349,17 @@ const achievements = group("achievements", "Achievements", [
         { key: "activity", label: "Activity", required: true },
         { key: "date", label: "Date", required: true },
         { key: "activityCount", label: "No. of Activity", required: true },
-        { key: "participantCount", label: "No. of Participant", required: true },
+        /** Client direction, 2026-09-13: "No. of Participant" splits into real Male/Female fields, with a live "Total" preview as they're filled in - same `sumOf` calculated-field pattern as Poshan Maaha's own Total Participants. The server still independently computes and stores `participantCount` as Male + Female on every save (leaf-record-registry.ts); this is purely a live preview, never the value actually submitted. */
+        { key: "participantCountMale", label: "No. of Participant (Male)", formLabel: "Male", required: true },
+        { key: "participantCountFemale", label: "No. of Participant (Female)", formLabel: "Female", required: true },
+        {
+          key: "participantCount",
+          label: "No. of Participant (Total)",
+          readonly: true,
+          fieldKind: "calculated",
+          sumOf: ["participantCountMale", "participantCountFemale"],
+          helperText: "Auto-calculated: Male + Female",
+        },
         { key: "remark", label: "Remark" },
       ],
       "Extension and Training activities under FLD",
@@ -1349,8 +1387,7 @@ const achievements = group("achievements", "Achievements", [
       { key: "kvk", label: "KVK Name", readonly: true },
       { key: "startDate", label: "Start Date", fieldKind: "date", formOrder: 7, required: true },
       { key: "endDate", label: "End Date", fieldKind: "date", formOrder: 8, required: true },
-      /** Real, always-populated field (5 of 5 seed rows non-empty) not present in the reference capture below - kept visible (hiding a required, populated field risks silent data loss on save) but placed after every confirmed field since its own real position isn't confirmed. */
-      { key: "program", label: "Training Program", formOrder: 13, required: true },
+      /** Removed (client direction, 2026-09-13 - fully redundant with Clientele/Training Type, confirmed against real data: the same underlying category was being captured three separate ways). The Prisma column (`program`) and any value a KVK already entered are left as-is, now optional - only the app's own form/list wiring to it is removed here. */
       { key: "title", label: "Training Title", formLabel: "Title of Training", formOrder: 6, required: true },
       { key: "venue", label: "Venue", formOrder: 10, required: true },
       /** Real field, but never populated (0 of 5 seed rows) - hidden from the Edit form to match the real reference (audit finding, 2026-09-02), list column untouched. */
@@ -1539,12 +1576,20 @@ const achievements = group("achievements", "Achievements", [
         formLabel: "Public Representatives",
         formOrder: 12,
       },
-      /** Real field is a disabled, auto-calculated readout ("Auto-calculated: sum of all participant categories"), never a real user input - server-computed the same way, see the matching leaf-record-registry.ts entry. `readonly` still set so required-field validation and the list table keep treating it as before; `fieldKind: "calculated"` is what actually makes it render (disabled, with its value) instead of being dropped from the form the way a plain `readonly` column is. */
+      /** Real field is a disabled, auto-calculated readout ("Auto-calculated: sum of all participant categories"), never a real user input - server-computed the same way, see the matching leaf-record-registry.ts entry. `readonly` still set so required-field validation and the list table keep treating it as before; `fieldKind: "calculated"` is what actually makes it render (disabled, with its value) instead of being dropped from the form the way a plain `readonly` column is. `sumOf` makes it a live preview while filling the form, not just after save (client-reported bug, 2026-09-13). */
       {
         key: "totalParticipants",
         label: "Total Participants",
         readonly: true,
         fieldKind: "calculated",
+        sumOf: [
+          "participantsGirls",
+          "participantsFarmWoman",
+          "participantsFarmers",
+          "participantsAganwadiWorkers",
+          "participantsGovtOfficials",
+          "participantsPublicRepresentatives",
+        ],
         helperText: "Auto-calculated: sum of all participant categories",
         formOrder: 13,
       },
@@ -1563,12 +1608,9 @@ const achievements = group("achievements", "Achievements", [
       "Swachhta hi Sewa",
       [
         { key: "kvk", label: "KVK", readonly: true },
-        {
-          key: "dateDurationOfObservation",
-          label: "Date Duration of Observation",
-          formLabel: "Date/Duration of Observation",
-          fieldKind: "date",
-        },
+        /** Client direction, 2026-09-13: the old single "Date Duration of Observation" field replaced with a real From/To range - see SwachhtaObservance.fromDate/toDate's own schema comment (the legacy dateDurationOfObservation column stays, just unused by the form now). `toDate` picks up the automatic end-date-after-start-date `min` for free (master-form-fields.tsx's isEndDateColumn/startDateValue already key off exactly this "fromDate"/"toDate" naming). */
+        { key: "fromDate", label: "From Date", formLabel: "From Date", fieldKind: "date", required: true },
+        { key: "toDate", label: "To Date", formLabel: "To Date", fieldKind: "date", required: true },
         {
           key: "totalNoOfActivitiesUndertaken",
           label: "Total No of Activities Undertaken",
@@ -1580,6 +1622,16 @@ const achievements = group("achievements", "Achievements", [
         { key: "noOfFarmers", label: "No of Farmers", formLabel: "Farmers" },
         /** Real field confirmed against the reference (atari-client.vercel.app, 2026-09-02) - "No. of Participants" has a third Others field alongside Staffs/Farmers, missing entirely before. */
         { key: "noOfOthers", label: "No of Others", formLabel: "Others", formOnly: true },
+        /** Client-reported bug, 2026-09-13: no live "Total" while filling the form (same gap as Poshan Maaha's own Total Participants, fixed the same way) - the PDF report already computes this total on the fly (buildSwachhtaByKind), so this is a live preview only, not a new stored column. */
+        {
+          key: "totalParticipants",
+          label: "Total Participants",
+          readonly: true,
+          fieldKind: "calculated",
+          sumOf: ["noOfStaffs", "noOfFarmers", "noOfOthers"],
+          helperText: "Auto-calculated: sum of all participant categories",
+          formOnly: true,
+        },
       ],
       "Observation of Swachhta hi Sewa SBA",
     ),
@@ -1589,12 +1641,9 @@ const achievements = group("achievements", "Achievements", [
       "Swachta Pakhwada",
       [
         { key: "kvk", label: "KVK", readonly: true },
-        {
-          key: "dateDurationOfObservation",
-          label: "Date Duration of Observation",
-          formLabel: "Date/Duration of Observation",
-          fieldKind: "date",
-        },
+        /** Same From/To range replacement as Sewa above, same day/direction. */
+        { key: "fromDate", label: "From Date", formLabel: "From Date", fieldKind: "date", required: true },
+        { key: "toDate", label: "To Date", formLabel: "To Date", fieldKind: "date", required: true },
         {
           key: "totalNoOfActivitiesUndertaken",
           label: "Total No of Activities Undertaken",
@@ -1606,6 +1655,16 @@ const achievements = group("achievements", "Achievements", [
         { key: "noOfFarmers", label: "No of Farmers", formLabel: "Farmers" },
         /** Real field confirmed against the reference (atari-client.vercel.app, 2026-09-02) - same "Others" gap as Sewa. */
         { key: "noOfOthers", label: "No of Others", formLabel: "Others", formOnly: true },
+        /** Same live-Total fix as Sewa above, same day/direction. */
+        {
+          key: "totalParticipants",
+          label: "Total Participants",
+          readonly: true,
+          fieldKind: "calculated",
+          sumOf: ["noOfStaffs", "noOfFarmers", "noOfOthers"],
+          helperText: "Auto-calculated: sum of all participant categories",
+          formOnly: true,
+        },
       ],
       "Observation of Swachta Pakhwada",
     ),
@@ -1621,7 +1680,8 @@ const achievements = group("achievements", "Achievements", [
       "Budget expenditure",
       [
         { key: "kvk", label: "KVK", readonly: true },
-        { key: "reportingYear", label: "Reporting Year", fieldKind: "date" },
+        /** Client direction, 2026-09-13: this rendered as a full calendar date-picker (fieldKind: "date") even though the underlying column is a plain year Int - genuinely inconsistent with every other "Reporting Year" field in the app, which is a year-only dropdown. Same staticOptions + real-years-merge pattern as Vehicle/Equipment Details' own Reporting Year (master-form-fields.tsx's own Reporting Year mechanism keys off exactly this - `key === "reportingYear" && staticOptions`), scoped to this leaf's own model via `yearsModel` so it never offers a year only some unrelated leaf actually has. */
+        { key: "reportingYear", label: "Reporting Year", placeholder: "Select", staticOptions: Array.from({ length: 4 }, (_, i) => String(new Date().getFullYear() - i)), yearsModel: "swachhtaBudgetExpenditure" },
         // Real section headings the reference shows above each pair (confirmed live, 2026-09-03) - were missing entirely before, so both pairs read as one undifferentiated block; each pair's own field labels were shortened to the reference's own bare "No of village covered"/"Total Expenditure(Rs.in Lakhs)" now that the heading carries which section they belong to (list table keeps the fuller "Vermicomposting ..."/"Other than Vermicomposting ..." via `label`).
         { key: "vermicompostingSectionHeading", label: "Vermicomposting", fieldKind: "section-heading", formOnly: true },
         {
@@ -1662,17 +1722,42 @@ const achievements = group("achievements", "Achievements", [
     "Production and supply of Technological products",
     [
       { key: "kvk", label: "KVK", readonly: true },
+      /** Server-computed from Reporting Date's own year (client screenshot, 2026-09-13: the real reference's own list table has this column) - same "readonly, no form input" precedent as Trainings/Extension Activities' own Reporting Year. */
+      { key: "reportingYear", label: "Reporting Year", readonly: true },
       { key: "reportingDate", label: "Reporting Date", formOnly: true, fieldKind: "date", formOrder: 1, required: true },
-      { key: "productCategory", label: "Product Category", sourceMaster: { master: "product-category", optionKey: "name" }, formOnly: true, formOrder: 2, required: true },
+      /** List header "Category" (client screenshot, 2026-09-13 - the real reference's own list column) - formLabel keeps the form's own clearer "Product Category" wording. */
+      { key: "productCategory", label: "Category", formLabel: "Product Category", sourceMaster: { master: "product-category", optionKey: "name" }, formOrder: 2, required: true },
       { key: "productType", label: "Product Type", sourceMaster: { master: "product-type", optionKey: "productCategoryType", dependsOnKey: "productCategory", filterKey: "productCategoryName" }, formOnly: true, formOrder: 3, required: true },
-      { key: "product", label: "Product", sourceMaster: { master: "products", optionKey: "productName", dependsOnKey: "productType", filterKey: "productCategoryType" }, formOnly: true, formOrder: 4, required: true },
-      /** Real, populated field (real seed data - "Dairy Animals", "Fisheries", etc.) not present in the reference capture below (productCategory/productType/product show as real but genuinely empty there too - a real, matching empty state, not a bug) - kept visible (hiding a populated field risks silent data loss) but placed after every confirmed field since its own real position isn't confirmed. */
-      { key: "category", label: "Category", formOrder: 9 },
+      /** Carries the picked product's own real Unit forward into the "unit" field below (client direction, 2026-09-13 - "Unit auto fetch karega") via /api/production-supply/prefill, same carryForwardFrom mechanism Equipment Details' own Equipment field already uses. */
+      { key: "product", label: "Product", sourceMaster: { master: "products", optionKey: "productName", dependsOnKey: "productType", filterKey: "productCategoryType", carryForwardFrom: "/api/production-supply/prefill" }, formOnly: true, formOrder: 4, required: true },
+      /**
+       * "Category" removed from the form (client direction, 2026-09-13 -
+       * never a real reference field, just leftover seed data) - replaced by
+       * "Provided to number of farmers" below. Column kept, now optional, so
+       * any value a KVK already entered stays untouched.
+       */
       /** Field order re-confirmed against the reference (atari-client.vercel.app, 2026-09-02 client handover zip): Reporting Date, Product Category | Product Type, Product | Species/Breed/Variety alone, with Unit + Quantity paired together in the next cell (not each pairing with an unrelated neighbour) | Value(Rs) alone. Unit/Quantity confirmed NOT required (no asterisk live, 2026-09-03) unlike every other field here. */
       { key: "variety", label: "Variety", formLabel: "Species/Breed/Variety", formOrder: 5, required: true },
       { key: "unit", label: "Unit", formOnly: true, formOrder: 6, pairWithNext: true },
       { key: "quantity", label: "Quantity", formOrder: 7 },
       { key: "value", label: "Value (Rs)", formOnly: true, formOrder: 8, required: true },
+      /**
+       * Sell/Supply (client direction, 2026-09-13: "sell/supply production
+       * ke andar hi banega", its own heading with its own auto-fetched Unit)
+       * - not a separate leaf, a real section right inside this same
+       * Production form, simply mirroring the produced Quantity above with
+       * how much of it was actually sold/supplied. "Provided to Number of
+       * Farmers" was tried and dropped same-day (client direction: "top
+       * shows how much was produced, below just shows how much was
+       * supplied, simple" - a farmer headcount didn't belong here, Farmers
+       * Details below already covers who it went to). Replaces the removed
+       * "Category" field and the reference's own "Sell and Supply" concept.
+       */
+      { key: "sellSupplyHeading", label: "Sell / Supply", fieldKind: "section-heading", formOnly: true, formOrder: 9 },
+      { key: "supplyUnit", label: "Unit", formOnly: true, formOrder: 10, pairWithNext: true },
+      /** formOnly (client direction, 2026-09-13) - the real reference's own list table doesn't show this as a column, only Quantity (produced), same as Value (Rs) above. */
+      { key: "quantitySupplied", label: "Quantity Sold/Supplied", formLabel: "Sold/Supplied", formOnly: true, formOrder: 11 },
+      { key: "supplyValue", label: "Value (Rs)", formOnly: true, formOrder: 12 },
       { key: "farmersDetails", label: "Farmers Details", fieldKind: "demographic-breakdown", demographicVariant: "grid", formOnly: true },
     ],
     "Production & Supply of Technological Products",
@@ -2113,7 +2198,7 @@ const projects = group(
         ]),
       ]),
     ], { cardLabel: "NICRA" }),
-    /** Card label confirmed live (2026-08-29, "project over" reference): "ARYA / SAFAL", not the earlier no-"/SAFAL" guess. */
+    /** Card label was "ARYA / SAFAL" (confirmed live, 2026-08-29 "project over" reference) - client direction, 2026-09-13, overrides that to "ARYA / SARAL". Internal group slug ("arya-safal") is left as-is; it's never shown to a user. */
     group("arya-safal", "Attracting and Retaining Youth in Agriculture(ARYA)", [
       leaf("arya-safal-current-year", "Current Year Details", [
         { key: "kvk", label: "KVK Name", readonly: true },
@@ -2160,7 +2245,7 @@ const projects = group(
         { key: "employmentOtherThanFamily", label: "Employment generated/year - Other than Family", formLabel: "Employment Generated/Year - Other" },
         { key: "personsVisited", label: "No. of persons visited entrepreneur unit" },
       ]),
-    ], { cardLabel: "ARYA / SAFAL" }),
+    ], { cardLabel: "ARYA / SARAL" }),
     /** Real group label confirmed live: "Out-scaling of Natural Farming" (in-page title); card label on the Projects landing page is the short "Natural Farming" (confirmed live, 2026-08-29 "project over" reference). */
     group("natural-farming", "Out-scaling of Natural Farming", [
       leaf("nf-geographical", "Geographical information", [

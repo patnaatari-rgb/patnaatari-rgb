@@ -19,7 +19,7 @@ import { AddLeafPage } from "@/components/data-table/add-leaf-page";
 import { EditLeafPage } from "@/components/data-table/edit-leaf-page";
 import { KvkMasterAddForm } from "@/components/data-table/kvk-master-add-form";
 import { KvkMasterEditForm } from "@/components/data-table/kvk-master-edit-form";
-import { LandDetailsForm } from "@/components/data-table/land-details-form";
+import { LandDetailsAddForm } from "@/components/data-table/land-details-add-form";
 import { StaffQuartersForm } from "@/components/data-table/staff-quarters-form";
 import { EmployeeDetailsAddForm } from "@/components/data-table/employee-details-add-form";
 import { OftForm } from "@/components/data-table/oft-form";
@@ -131,16 +131,15 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
 
   const { node, trail } = resolved;
 
-  // Leaves the live reference gives no per-row Add/Edit page:
-  //  - land-details: one repeatable "Total Land with KVK" panel
-  //  - staff-transferred: a read-only table (records come from the Transfer
-  //    action on Employee Details, atariams.org /transfer-staff)
-  // Send those URLs back to the list instead of 404ing.
-  if (
-    (isAddPage || isEditPage) &&
-    node.type === "leaf" &&
-    (node.slug === "land-details" || node.slug === "staff-transferred")
-  ) {
+  // staff-transferred gives no per-row Add/Edit page in the live reference -
+  // it's a read-only table (records come from the Transfer action on
+  // Employee Details, atariams.org /transfer-staff). Send that URL back to
+  // the list instead of 404ing. Land Details used to be special-cased here
+  // too (one repeatable "Total Land with KVK" panel, no list/Add New at
+  // all), but the client asked for it to match every sibling leaf instead -
+  // a real list with its own Add New/Edit pages (client direction,
+  // 2026-09-13).
+  if ((isAddPage || isEditPage) && node.type === "leaf" && node.slug === "staff-transferred") {
     redirect(`/forms/${slug.join("/")}`);
   }
 
@@ -269,6 +268,9 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     }
     if (node.slug === "staff-quarters") {
       return <StaffQuartersForm trail={addTrail} backHref={backHref} title="Add Staff Quarters" />;
+    }
+    if (node.slug === "land-details") {
+      return <LandDetailsAddForm trail={addTrail} backHref={backHref} />;
     }
     if (node.slug === "employee-details") {
       return <EmployeeDetailsAddForm trail={addTrail} backHref={backHref} />;
@@ -785,6 +787,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         activity: r.activity,
         date: r.date.toISOString().slice(0, 10),
         activityCount: String(r.activityCount),
+        participantCountMale: r.participantCountMale != null ? String(r.participantCountMale) : "",
+        participantCountFemale: r.participantCountFemale != null ? String(r.participantCountFemale) : "",
         participantCount: String(r.participantCount),
         remark: r.remark ?? "",
       })),
@@ -820,7 +824,6 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
         endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
-        program: r.program,
         title: r.title,
         venue: r.venue ?? "",
         trainingDiscipline: r.trainingDiscipline ?? "",
@@ -990,7 +993,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        dateDurationOfObservation: r.dateDurationOfObservation,
+        fromDate: r.fromDate ? r.fromDate.toISOString().slice(0, 10) : "",
+        toDate: r.toDate ? r.toDate.toISOString().slice(0, 10) : "",
         totalNoOfActivitiesUndertaken: String(r.totalNoOfActivitiesUndertaken),
         noOfStaffs: String(r.noOfStaffs),
         noOfFarmers: String(r.noOfFarmers),
@@ -1029,7 +1033,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        category: r.category,
+        reportingYear: r.reportingYear != null ? String(r.reportingYear) : "",
+        productCategory: r.productCategory ?? "",
         variety: r.variety,
         quantity: String(r.quantity),
       })),
@@ -2749,9 +2754,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         title={
           node.type === "group"
             ? "Form Management"
-            : node.type === "leaf" &&
-                (node.slug === "technical-achievement" ||
-                  (node.slug === "land-details" && user?.kvkId))
+            : node.type === "leaf" && node.slug === "technical-achievement"
               ? (node.pageTitle ?? node.label)
               : undefined
         }
@@ -2778,14 +2781,6 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       ) : node.type === "leaf" && node.slug === "technical-achievement" ? (
         /* The one Form Management leaf that is a matrix report rather than a list table. */
         <TechnicalAchievementSummaryPanel />
-      ) : node.type === "leaf" && node.slug === "land-details" && user?.kvkId ? (
-        /*
-         * Land Details for a KVK Admin is the reference's repeatable "Total
-         * Land with KVK" section (Item + In Ha, add/remove rows, one save) -
-         * not a per-row list table. Super Admin still gets the plain table
-         * below (all KVKs' land rows, read scope).
-         */
-        <LandDetailsForm backHref={listBackHref} />
       ) : node.type === "leaf" ? (
         <EmptyDataTable
           title={node.pageTitle ?? node.label}
@@ -2799,11 +2794,16 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           // A Super Admin can't add a KVK-owned record (no KVK of their own -
           // /api/leaf-record needs the session's kvkId), and the real
           // reference shows no "Add" to a Super Admin on these leaves either.
-          // "view-kvks" is the exception - its own /api/kvks route is a real
-          // Super Admin create flow.
+          // "view-kvks" is the exception the other way round: it's a real
+          // Super Admin create flow (its own /api/kvks route onboards a whole
+          // new KVK into the system), but a KVK Admin has no business adding
+          // a brand new KVK - they only ever view their own one row, so they
+          // get the same "no Add" treatment every other leaf gives them
+          // (client report, 2026-09-13: "Add New" showed on View KVK for a
+          // KVK Admin, who should only see their own existing KVK info).
           hideAddNew={
             node.slug === "staff-transferred" ||
-            (node.slug !== "view-kvks" && !user?.kvkId)
+            (node.slug === "view-kvks" ? Boolean(user?.kvkId) : !user?.kvkId)
           }
           addNewHref={
             CUSTOM_FORM_SLUGS.has(node.slug)

@@ -21,8 +21,13 @@ const GT = (nums: string[], titleIncludes: string, label: string, tableIncludes:
 
 export const REPORT_SUBSECTION_BY_LEAF: Record<string, ReportSubsectionRef> = {
   // 1. About KVK
-  "about-kvk/basic/view-kvks": G(["1.1"], "Basic Information", "Basic Information"),
-  "about-kvk/basic/bank-account-details": G(["1.1"], "Basic Information", "Basic Information"),
+  // Each narrows to its own table(s) inside subsection 1.1 - a download from
+  // either leaf used to dump the whole "Basic Information" subsection (KVK
+  // address + Host Org address + Bank Account together), so downloading from
+  // View KVKs showed Bank Account Details bundled in (client report,
+  // 2026-09-13). Same GT pattern as Employee Details / Land Details below.
+  "about-kvk/basic/view-kvks": GT(["1.1"], "Basic Information", "Basic Information", "Name and address of"),
+  "about-kvk/basic/bank-account-details": GT(["1.1"], "Basic Information", "Basic Information", "Bank Account Details"),
   "about-kvk/employee/employee-details": GT(["1.2"], "Employee Information", "Employee Information", "All KVK Staff"),
   "about-kvk/employee/staff-transferred": GT(["1.2"], "Employee Information", "Employee Information", "Staff Transferred"),
   // Each narrows to its own table inside subsection 1.3 - a download from

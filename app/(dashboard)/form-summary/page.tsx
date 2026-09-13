@@ -59,6 +59,44 @@ function reportingYearOptions(): string[] {
 type ViewMode = "kvk" | "matrix";
 type SortDir = "desc" | "asc";
 
+/**
+ * One category (e.g. "About KVK", "Achievements") within a KVK's expanded
+ * form list, collapsible on its own instead of only as part of one big
+ * all-or-nothing block (client report, 2026-09-13: "Category/Form sections
+ * should be collapsible individually... instead of closing the entire
+ * section together"). Starts open so nothing that was already visible
+ * disappears on first load - this only adds the ability to close a section,
+ * it doesn't default anything closed.
+ */
+function CollapsibleSection({ label, leaves }: { label: string; leaves: LeafSummary[] }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="mb-3 flex w-full items-center gap-1.5 text-left"
+      >
+        {open ? (
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {label}
+        </p>
+      </button>
+      {open && (
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          {leaves.map((leaf) => (
+            <LeafCard key={leaf.path} leaf={leaf} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LeafCard({ leaf }: { leaf: LeafSummary }) {
   return (
     <Link
@@ -138,6 +176,22 @@ export default function FormSummaryPage() {
 
   const ownKvk = isKvk ? data?.byKvk[0] : undefined;
 
+  /**
+   * A KVK Admin's own single row used to render always-expanded, with no
+   * "By KVK"/"Matrix" toggle at all - so once the same toggle is shared with
+   * Super Admin below (client report, 2026-09-13: "waise hi kvk ko bhi show
+   * kro"), auto-expand it the first time data loads rather than making a KVK
+   * Admin click their own row to see anything, which would be a regression
+   * from what was always visible before.
+   */
+  const autoExpandedRef = useRef(false);
+  useEffect(() => {
+    if (!autoExpandedRef.current && isKvk && ownKvk) {
+      autoExpandedRef.current = true;
+      setExpanded(new Set([ownKvk.id]));
+    }
+  }, [isKvk, ownKvk]);
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -175,73 +229,67 @@ export default function FormSummaryPage() {
         <div className="rounded-lg border border-border bg-card p-10 text-center text-sm text-muted-foreground">
           Loading summary...
         </div>
-      ) : isKvk ? (
-        <>
-          <div className="rounded-lg border border-border bg-card p-5">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Forms Tracked</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{data.formsTracked}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Entries Filled</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
-                  {ownKvk?.filled ?? 0} / {data.formsTracked}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Overall Progress</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-primary">{ownKvk?.percent ?? 0}%</p>
-              </div>
-            </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${ownKvk?.percent ?? 0}%` }} />
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            {ownKvk?.sections.map((section) => (
-              <div key={section.sectionLabel} className="rounded-lg border border-border bg-card p-4">
-                <p className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {section.sectionLabel}
-                </p>
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                  {section.leaves.map((leaf) => (
-                    <LeafCard key={leaf.path} leaf={leaf} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
       ) : (
         <>
-          <div className="rounded-lg border border-border bg-card p-5">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">KVKs</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{data.totalKvks}</p>
+          {isKvk ? (
+            <div className="rounded-lg border border-border bg-card p-5">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Forms Tracked</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{data.formsTracked}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Entries Filled</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+                    {ownKvk?.filled ?? 0} / {data.formsTracked}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Overall Progress</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-primary">{ownKvk?.percent ?? 0}%</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Forms Tracked</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{data.formsTracked}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Entries Filled</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
-                  {data.totalFilled} / {data.totalPossible}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Overall Progress</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-primary">{data.overallProgressPercent}%</p>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${ownKvk?.percent ?? 0}%` }} />
               </div>
             </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${data.overallProgressPercent}%` }} />
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-5">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">KVKs</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{data.totalKvks}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Forms Tracked</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{data.formsTracked}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Entries Filled</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+                    {data.totalFilled} / {data.totalPossible}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Overall Progress</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-primary">{data.overallProgressPercent}%</p>
+                </div>
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${data.overallProgressPercent}%` }} />
+              </div>
             </div>
-          </div>
+          )}
 
+          {/*
+            By KVK / Matrix toggle - now shared with every role (client
+            report, 2026-09-13: "jaise super admin mai hai waise hi kvk ko
+            bhi show kro"), not just Super Admin. A KVK Admin's own
+            `filteredSorted` is always just their one row, so both views
+            degrade to a single column/row instead of needing their own code
+            path. The Progress-sort button and KVK search only make sense
+            with more than one row, so they stay Super-Admin-only.
+          */}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-1 rounded-md border border-border bg-muted/50 p-0.5">
               <button
@@ -267,25 +315,27 @@ export default function FormSummaryPage() {
                 Matrix
               </button>
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
-              >
-                <ArrowUpDown className="size-3.5" />
-                Progress
-              </Button>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filter KVKs..."
-                  className="w-64 pl-8"
-                />
+            {!isKvk && (
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+                >
+                  <ArrowUpDown className="size-3.5" />
+                  Progress
+                </Button>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Filter KVKs..."
+                    className="w-64 pl-8"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {view === "kvk" ? (
@@ -340,16 +390,11 @@ export default function FormSummaryPage() {
                               <td colSpan={4} className="bg-muted/20 px-4 py-4">
                                 <div className="space-y-4">
                                   {kvk.sections.map((section) => (
-                                    <div key={section.sectionLabel}>
-                                      <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                        {section.sectionLabel}
-                                      </p>
-                                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                                        {section.leaves.map((leaf) => (
-                                          <LeafCard key={leaf.path} leaf={leaf} />
-                                        ))}
-                                      </div>
-                                    </div>
+                                    <CollapsibleSection
+                                      key={section.sectionLabel}
+                                      label={section.sectionLabel}
+                                      leaves={section.leaves}
+                                    />
                                   ))}
                                 </div>
                               </td>

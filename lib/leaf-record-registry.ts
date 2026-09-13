@@ -514,8 +514,10 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
   "achievements/front-line-demonstration/fld-extension-training": async (v, ctx) => {
     const fld = await prisma.fld.findFirst({ where: { kvkId: ctx.kvkId, technologyDemonstrated: reqStr(v.fldName) } });
     if (!fld) throw new Error("FLD not found");
+    const participantCountMale = reqInt(v.participantCountMale);
+    const participantCountFemale = reqInt(v.participantCountFemale);
     return prisma.fldExtensionTraining.create({
-      data: { fldId: fld.id, zoneId: ctx.zoneId, activity: reqStr(v.activity), date: reqDate(v.date), activityCount: reqInt(v.activityCount), participantCount: reqInt(v.participantCount), remark: str(v.remark) },
+      data: { fldId: fld.id, zoneId: ctx.zoneId, activity: reqStr(v.activity), date: reqDate(v.date), activityCount: reqInt(v.activityCount), participantCountMale, participantCountFemale, participantCount: participantCountMale + participantCountFemale, remark: str(v.remark) },
     });
   },
   "achievements/front-line-demonstration/fld-technical-feedback": async (v, ctx) => {
@@ -532,7 +534,7 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
         /** Server-computed, never trusted from the client - the real Edit form has no Reporting Year input at all (audit finding, 2026-09-02). */
         reportingYear: (date(v.startDate) ?? new Date()).getFullYear(),
         startDate: date(v.startDate), endDate: date(v.endDate),
-        program: reqStr(v.program), title: reqStr(v.title), venue: str(v.venue),
+        title: reqStr(v.title), venue: str(v.venue),
         trainingDiscipline: str(v.trainingDiscipline), thematicArea: str(v.thematicArea), clientele: str(v.clientele),
         trainingType: str(v.trainingType), trainingArea: str(v.trainingArea), onCampusOffCampus: str(v.onCampusOffCampus),
         courseCoordinator: str(v.courseCoordinator), fundingSource: str(v.fundingSource), fundingAgencyName: str(v.fundingAgencyName),
@@ -623,11 +625,11 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
     }),
   "achievements/swachhta-bharat-abhiyaan/sewa": (v, ctx) =>
     prisma.swachhtaObservance.create({
-      data: { ...ctx, kind: "SEWA", dateDurationOfObservation: reqStr(v.dateDurationOfObservation), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
+      data: { ...ctx, kind: "SEWA", fromDate: reqDate(v.fromDate), toDate: reqDate(v.toDate), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
     }),
   "achievements/swachhta-bharat-abhiyaan/pakhwada": (v, ctx) =>
     prisma.swachhtaObservance.create({
-      data: { ...ctx, kind: "PAKHWADA", dateDurationOfObservation: reqStr(v.dateDurationOfObservation), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
+      data: { ...ctx, kind: "PAKHWADA", fromDate: reqDate(v.fromDate), toDate: reqDate(v.toDate), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
     }),
   "achievements/swachhta-bharat-abhiyaan/budget-expenditure": (v, ctx) =>
     prisma.swachhtaBudgetExpenditure.create({
@@ -668,14 +670,17 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
       data: {
         ...ctx,
         reportingDate: date(v.reportingDate),
+        /** Server-computed, never trusted from the client - same precedent as Trainings/Extension Activities' own Reporting Year. */
+        reportingYear: (date(v.reportingDate) ?? new Date()).getFullYear(),
         productCategory: str(v.productCategory),
         productType: str(v.productType),
         product: str(v.product),
-        category: reqStr(v.category),
         variety: reqStr(v.variety),
         unit: str(v.unit),
         quantity: reqDec(v.quantity),
         value: dec(v.value),
+        quantitySupplied: dec(v.quantitySupplied),
+        supplyValue: dec(v.supplyValue),
         generalMale: int(v.generalMale) ?? 0,
         generalFemale: int(v.generalFemale) ?? 0,
         obcMale: int(v.obcMale) ?? 0,
@@ -1919,11 +1924,14 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
     }
     return result;
   },
-  "achievements/front-line-demonstration/fld-extension-training": (id, v, ctx) =>
-    prisma.fldExtensionTraining.updateMany({
+  "achievements/front-line-demonstration/fld-extension-training": (id, v, ctx) => {
+    const participantCountMale = reqInt(v.participantCountMale);
+    const participantCountFemale = reqInt(v.participantCountFemale);
+    return prisma.fldExtensionTraining.updateMany({
       where: { id, fld: { ...kvkScope(ctx) } },
-      data: { activity: reqStr(v.activity), date: reqDate(v.date), activityCount: reqInt(v.activityCount), participantCount: reqInt(v.participantCount), remark: str(v.remark) },
-    }),
+      data: { activity: reqStr(v.activity), date: reqDate(v.date), activityCount: reqInt(v.activityCount), participantCountMale, participantCountFemale, participantCount: participantCountMale + participantCountFemale, remark: str(v.remark) },
+    });
+  },
   "achievements/front-line-demonstration/fld-technical-feedback": (id, v, ctx) =>
     prisma.fldTechnicalFeedback.updateMany({
       where: { id, fld: { ...kvkScope(ctx) } },
@@ -1935,7 +1943,7 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
       data: {
         reportingYear: (date(v.startDate) ?? new Date()).getFullYear(),
         startDate: date(v.startDate), endDate: date(v.endDate),
-        program: reqStr(v.program), title: reqStr(v.title), venue: str(v.venue),
+        title: reqStr(v.title), venue: str(v.venue),
         trainingDiscipline: str(v.trainingDiscipline), thematicArea: str(v.thematicArea), clientele: str(v.clientele),
         trainingType: str(v.trainingType), trainingArea: str(v.trainingArea), onCampusOffCampus: str(v.onCampusOffCampus),
         courseCoordinator: str(v.courseCoordinator), fundingSource: str(v.fundingSource), fundingAgencyName: str(v.fundingAgencyName),
@@ -2038,12 +2046,12 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
   "achievements/swachhta-bharat-abhiyaan/sewa": (id, v, ctx) =>
     prisma.swachhtaObservance.updateMany({
       where: { id, ...kvkScope(ctx), kind: "SEWA" },
-      data: { dateDurationOfObservation: reqStr(v.dateDurationOfObservation), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
+      data: { fromDate: reqDate(v.fromDate), toDate: reqDate(v.toDate), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
     }),
   "achievements/swachhta-bharat-abhiyaan/pakhwada": (id, v, ctx) =>
     prisma.swachhtaObservance.updateMany({
       where: { id, ...kvkScope(ctx), kind: "PAKHWADA" },
-      data: { dateDurationOfObservation: reqStr(v.dateDurationOfObservation), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
+      data: { fromDate: reqDate(v.fromDate), toDate: reqDate(v.toDate), totalNoOfActivitiesUndertaken: reqInt(v.totalNoOfActivitiesUndertaken), noOfStaffs: reqInt(v.noOfStaffs), noOfFarmers: reqInt(v.noOfFarmers), noOfOthers: reqInt(v.noOfOthers) },
     }),
   "achievements/swachhta-bharat-abhiyaan/budget-expenditure": (id, v, ctx) =>
     prisma.swachhtaBudgetExpenditure.updateMany({
@@ -2083,14 +2091,17 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
       where: { id, ...kvkScope(ctx) },
       data: {
         reportingDate: date(v.reportingDate),
+        /** Server-computed, never trusted from the client - same precedent as Trainings/Extension Activities' own Reporting Year. */
+        reportingYear: (date(v.reportingDate) ?? new Date()).getFullYear(),
         productCategory: str(v.productCategory),
         productType: str(v.productType),
         product: str(v.product),
-        category: reqStr(v.category),
         variety: reqStr(v.variety),
         unit: str(v.unit),
         quantity: reqDec(v.quantity),
         value: dec(v.value),
+        quantitySupplied: dec(v.quantitySupplied),
+        supplyValue: dec(v.supplyValue),
         generalMale: int(v.generalMale) ?? 0,
         generalFemale: int(v.generalFemale) ?? 0,
         obcMale: int(v.obcMale) ?? 0,

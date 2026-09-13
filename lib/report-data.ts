@@ -66,7 +66,7 @@ const MODEL_FIELDS: Record<string, string[]> = {
   technicalAchievementSummaryEntry: ["reportingYear", "sectionCode", "metricCode", "casteCategory", "value"],
   oft: ["reportingYear", "discipline", "staff", "thematicArea", "trialOnForm", "problemDiagnosed", "sourceOfTechnology", "productionSystem", "performanceIndicators", "finalRecommendation", "constraintsIdentified", "farmersParticipationProcess", "quantity", "unit", "noOfTrialReplicationFarmer", "startMonth", "endMonth", "criticalInput", "costOfOft", "fundingAgency", "resultSummary", "status", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
   fld: ["reportingYear", "startDate", "endDate", "category", "subCategory", "technologyDemonstrated", "status"],
-  fldExtensionTraining: ["activity", "date", "activityCount", "participantCount", "remark"],
+  fldExtensionTraining: ["activity", "date", "activityCount", "participantCountMale", "participantCountFemale", "participantCount", "remark"],
   fldTechnicalFeedback: ["crop", "feedback"],
   training: ["reportingYear", "startDate", "endDate", "program", "title", "venue", "trainingDiscipline", "thematicArea", "clientele", "trainingType", "trainingArea", "onCampusOffCampus", "courseCoordinator", "fundingSource", "fundingAgencyName", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
   extensionActivity: ["reportingYear", "startDate", "endDate", "natureOfExtensionActivity", "noOfActivities", "noOfParticipants", "staff", "farmersGeneralMale", "farmersGeneralFemale", "farmersObcMale", "farmersObcFemale", "farmersScMale", "farmersScFemale", "farmersStMale", "farmersStFemale", "officialsGeneralMale", "officialsGeneralFemale", "officialsObcMale", "officialsObcFemale", "officialsScMale", "officialsScFemale", "officialsStMale", "officialsStFemale"],
@@ -75,7 +75,7 @@ const MODEL_FIELDS: Record<string, string[]> = {
   celebrationDay: ["importantDay", "eventDate", "noOfActivities", "farmersGeneralMale", "farmersGeneralFemale", "farmersObcMale", "farmersObcFemale", "farmersScMale", "farmersScFemale", "farmersStMale", "farmersStFemale", "officialsGeneralMale", "officialsGeneralFemale", "officialsObcMale", "officialsObcFemale", "officialsScMale", "officialsScFemale", "officialsStMale", "officialsStFemale"],
   worldSoilDay: ["reportingYear", "noOfActivitiesConducted", "soilHealthCardsDistributed", "noOfVip", "vipNames", "totalParticipants", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
   poshanMaaha: ["activityDate", "activitiesConducted", "eventName", "saplingsPlanted", "vegetableKits", "participantsGirls", "participantsPublicRepresentatives", "participantsFarmWoman", "participantsFarmers", "participantsAganwadiWorkers", "participantsGovtOfficials", "totalParticipants"],
-  swachhtaObservance: ["kind", "dateDurationOfObservation", "totalNoOfActivitiesUndertaken", "noOfStaffs", "noOfFarmers"],
+  swachhtaObservance: ["kind", "fromDate", "toDate", "totalNoOfActivitiesUndertaken", "noOfStaffs", "noOfFarmers"],
   swachhtaBudgetExpenditure: ["reportingYear", "vermicompostingVillagesCovered", "vermicompostingTotalExpenditure"],
   technologyProductProduction: ["category", "variety", "quantity"],
   soilWaterPlantAnalysis: ["startDate", "endDate", "analysis", "noOfSamplesAnalyzed", "noOfVillagesCovered", "amountRealized"],
@@ -290,18 +290,74 @@ function kvkOrZoneWhere(model: string, scope: { kvkId?: string; zoneId: string }
   return (KVK_WHERE_OVERRIDE[model] ?? ((kvkId: string) => ({ kvkId })))(scope.kvkId);
 }
 
+/**
+ * Client report, 2026-09-13: every "Reporting Year" dropdown fed by this
+ * function (OFT/FLD's own bespoke forms, every generic staticOptions
+ * Reporting Year field, the Reports checkbox) visibly took a moment to fill
+ * in after the rest of the form had already rendered - real, not just
+ * perceived: this function fires ~69 parallel `findMany` calls (one per
+ * model in the two maps above) on every single call, and this app's Neon
+ * database sits in Singapore while its functions run in iad1 (US) until the
+ * project is on Vercel Pro (Hobby plan ignores the app's own preferredRegion
+ * setting) - every one of those 69 round trips pays that cross-region
+ * latency. A short in-memory cache
+ * (60s, per scope) means only the FIRST dropdown opened in a KVK's session
+ * pays the full cost; every other Reporting Year field opened shortly after
+ * - on the same page or a different one - resolves instantly from memory.
+ * Module-level `Map`, so it only helps within one warm serverless instance
+ * (Fluid Compute reuses those across requests) and never serves stale data
+ * across deployments (a fresh instance starts with an empty cache); it
+ * never blocks a genuinely new year from a record already being edited
+ * (that value is always merged in separately by the caller, not sourced
+ * from here) - the only real tradeoff is a brand-new year, from a record
+ * saved less than 60s ago, taking up to that long to appear in a
+ * *different* dropdown than the one that just saved it.
+ */
+const REPORTING_YEARS_CACHE = new Map<string, { years: string[]; expiresAt: number }>();
+const REPORTING_YEARS_CACHE_TTL_MS = 60_000;
+
 export async function distinctReportingYears(scope: {
   kvkId?: string;
   zoneId: string;
+  /**
+   * Client direction, 2026-09-13: a specific "Reporting Year" field (OFT's
+   * own, Budget Expenditure's own, ...) should only ever offer years THAT
+   * model actually has data in, not every year this KVK has entered
+   * anything, anywhere, in the whole app - the two got conflated because
+   * every per-model Reporting Year field and the Reports page's own
+   * cross-model "which years have any data" checklist all called this same
+   * function the same way. Pass the Prisma model name (matching
+   * MODEL_PERIOD_YEAR_FIELD/MODEL_PERIOD_DATE_FIELDS' own keys) to scope to
+   * just that model; omit it for the Reports checklist's real "union across
+   * everything" need. Scoping also means far fewer round trips (one model
+   * instead of ~69), so a scoped call also just runs faster.
+   */
+  model?: string;
+}): Promise<string[]> {
+  const cacheKey = `${scope.kvkId ?? `zone:${scope.zoneId}`}:${scope.model ?? "*"}`;
+  const cached = REPORTING_YEARS_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.years;
+
+  const years = await computeDistinctReportingYears(scope);
+  REPORTING_YEARS_CACHE.set(cacheKey, { years, expiresAt: Date.now() + REPORTING_YEARS_CACHE_TTL_MS });
+  return years;
+}
+
+async function computeDistinctReportingYears(scope: {
+  kvkId?: string;
+  zoneId: string;
+  model?: string;
 }): Promise<string[]> {
   const years = new Set<number>();
 
   // A model with a real reporting-year column wins over its date fields too
   // (same precedence `periodClause` itself applies), so a model listed in
   // both maps below is only ever queried once, via its year column.
-  const yearFieldModels = Object.entries(MODEL_PERIOD_YEAR_FIELD);
+  const yearFieldModels = Object.entries(MODEL_PERIOD_YEAR_FIELD).filter(
+    ([model]) => !scope.model || model === scope.model,
+  );
   const dateFieldModels = Object.entries(MODEL_PERIOD_DATE_FIELDS).filter(
-    ([model]) => !MODEL_PERIOD_YEAR_FIELD[model],
+    ([model]) => !MODEL_PERIOD_YEAR_FIELD[model] && (!scope.model || model === scope.model),
   );
 
   await Promise.all([
@@ -770,13 +826,26 @@ function buildOftKvkWiseDetails(codePrefix: string) {
   };
 }
 
-/** 2.3.D "Extension & Training activities under FLD" (super-v2-prod.pdf p.37) - flat, joined to the parent FLD's name + KVK. */
+/**
+ * 2.3.D "Extension & Training activities under FLD" (super-v2-prod.pdf
+ * p.37) - flat, joined to the parent FLD's name + KVK. Male/Female columns
+ * added (client direction, 2026-09-13) alongside the real reference's own
+ * "Participants" total - a pre-existing row has neither (that split can't
+ * be reconstructed after the fact), so both print blank there rather than
+ * a guessed number.
+ */
 async function buildFldExtensionTraining(scope: ReportScope): Promise<CustomTableResult> {
   const rows = await prisma.fldExtensionTraining.findMany({
     where: scope.kvkId ? { fld: { kvkId: scope.kvkId } } : { zoneId: scope.zoneId },
     include: { fld: { select: { technologyDemonstrated: true, kvk: { select: { name: true } } } } },
     orderBy: [{ fld: { kvkId: "asc" } }, { date: "asc" }],
   });
+  // Real columns confirmed against super-v2-prod.pdf p.37-38: Sl., KVK, FLD,
+  // Activity, Date, No. of activities, Participants (one plain total, not
+  // split), Remarks - the form's own Male/Female split (client direction,
+  // 2026-09-13) is a live UI convenience there only; the report keeps its
+  // already-verified single "Participants" column, same total the form's
+  // own server computes as participantCountMale + participantCountFemale.
   const columns: ReportColumn[] = [
     { key: "kvk", label: "KVK" },
     { key: "fld", label: "FLD" },
@@ -2171,7 +2240,7 @@ function buildSwachhtaByKind(kind: "SEWA" | "PAKHWADA") {
     const rows = await prisma.swachhtaObservance.findMany({
       where: { kind, ...(scopeAndPeriod(scope, "swachhtaObservance")) },
       select: {
-        dateDurationOfObservation: true, totalNoOfActivitiesUndertaken: true,
+        fromDate: true, toDate: true, totalNoOfActivitiesUndertaken: true,
         noOfStaffs: true, noOfFarmers: true, noOfOthers: true,
         kvk: { select: { name: true, state: { select: { name: true } } } },
       },
@@ -2202,7 +2271,7 @@ function buildSwachhtaByKind(kind: "SEWA" | "PAKHWADA") {
       rows: rows.map((r) => ({
         state: r.kvk.state.name,
         kvk: r.kvk.name,
-        date: r.dateDurationOfObservation,
+        date: `${stringifyValue(r.fromDate)} to ${stringifyValue(r.toDate)}`,
         activities: String(r.totalNoOfActivitiesUndertaken),
         staffs: String(r.noOfStaffs),
         farmers: String(r.noOfFarmers),
@@ -2396,7 +2465,7 @@ async function buildTechnicalAchievementSummary(scope: ReportScope): Promise<Cus
 
   // Product Category Master values already read "Production of Seed" etc.; only
   // when a record has none do we build the label from its finer `category`.
-  const productionLabel = (r: { productCategory: string | null; category: string }) => {
+  const productionLabel = (r: { productCategory: string | null; category: string | null }) => {
     const pc = r.productCategory?.trim();
     if (pc) return pc.toLowerCase().startsWith("production") ? pc : `Production of ${pc}`;
     const c = r.category?.trim();

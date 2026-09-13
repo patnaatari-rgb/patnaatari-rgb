@@ -108,6 +108,12 @@ export function KvkCheckboxFilter({
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                /* Base UI's Menu owns keydown on the popup for typeahead/arrow
+                   nav, which otherwise swallows every character before it
+                   reaches this input - stop the bubble so typing actually
+                   lands here (same real fix as column-filter-menu.tsx's own
+                   search input; this one just never got it). */
+                onKeyDown={(e) => e.stopPropagation()}
                 placeholder="Search KVKs..."
                 className="h-7 pl-7 text-xs"
               />

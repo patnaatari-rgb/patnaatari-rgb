@@ -1059,7 +1059,15 @@ model FldExtensionTraining {
   activity         String
   date             DateTime
   activityCount    Int
+  /// Kept as the combined total (client direction, 2026-09-13: report/list
+  /// structure stays exactly as-is) - now server-computed as
+  /// participantCountMale + participantCountFemale on every save, rather
+  /// than its own separate form input.
   participantCount Int
+  /// Real Male/Female split (client direction, 2026-09-13) - nullable since
+  /// no pre-existing row can be split retroactively; every new row gets both.
+  participantCountMale   Int?
+  participantCountFemale Int?
   remark           String?
 
   createdAt DateTime @default(now())
@@ -1092,7 +1100,13 @@ model Training {
   reportingYear      Int
   startDate          DateTime?
   endDate            DateTime?
-  program            String
+  /// Client direction, 2026-09-13: removed from the form entirely (fully
+  /// redundant with Clientele/Training Type - real data showed the same
+  /// underlying category captured three times over). Kept, now optional, so
+  /// every pre-existing row's value is preserved - the report's own
+  /// Clientele column already falls back to this for an old row with a
+  /// blank Clientele (buildTrainings, lib/report-data.ts).
+  program            String?
   title              String
   venue              String?
   trainingDiscipline String?
@@ -1286,7 +1300,18 @@ model SwachhtaObservance {
   kvkId                         String
   kvk                           Kvk                    @relation(fields: [kvkId], references: [id])
   zoneId                        String
-  dateDurationOfObservation     String
+  /// Legacy single-date field (client direction, 2026-09-13: replaced by a
+  /// real fromDate/toDate range on the form) - kept, now optional, so every
+  /// pre-existing row's original value is preserved rather than dropped;
+  /// no longer written by the form, which now collects fromDate/toDate
+  /// directly.
+  dateDurationOfObservation     String?
+  /// Real From/To observation date range (client direction, 2026-09-13) -
+  /// backfilled from dateDurationOfObservation for every row that predates
+  /// this column (see the one-off backfill script run alongside this
+  /// migration).
+  fromDate                      DateTime?
+  toDate                        DateTime?
   totalNoOfActivitiesUndertaken Int
   noOfStaffs                    Int
   noOfFarmers                   Int
@@ -1331,14 +1356,38 @@ model TechnologyProductProduction {
   zoneId   String
   /// Real fields confirmed against the reference (atari-client.vercel.app, 2026-08-15 screenshots) - "Reporting Date", the real Product Category -> Product Type -> Product cascade (same masters All Masters' own Product Type/Product pages already manage), Unit, Value, and Farmers Details were missing entirely.
   reportingDate DateTime?
+  /// Server-computed from reportingDate's own year (client screenshot,
+  /// 2026-09-13: the real reference's own list table has a "Reporting Year"
+  /// column - same "no manual input, derived from the real date" precedent
+  /// as Trainings/Extension Activities' own Reporting Year).
+  reportingYear Int?
   productCategory String?
   productType     String?
   product         String?
-  category String
+  /// Replaced by `providedToFarmers` on the form (client direction,
+  /// 2026-09-13 - "Category" here was never a real reference field, just
+  /// leftover seed data). Column kept and made optional so any value a KVK
+  /// already entered is preserved; no form input writes to it any more.
+  category String?
   variety  String
+  /// Real per-product unit, now auto-filled from the selected Product's own
+  /// ProductMaster.unit (client direction, 2026-09-13: "Unit auto fetch
+  /// karega") instead of typed by hand - still a plain column since a KVK
+  /// can still see/adjust it if a master row's unit is ever wrong.
   unit     String?
   quantity Decimal @db.Decimal(14, 2)
   value    Decimal? @db.Decimal(14, 2)
+  /// Sell/Supply (client direction, 2026-09-13: "sell/supply production ke
+  /// andar hi banega" - real fields added directly on this same record, not
+  /// a separate leaf/model) - how much of this batch was actually sold/
+  /// supplied, and for how much money. Replaces the removed "Category"
+  /// field and the reference's own "Sell and Supply" concept.
+  quantitySupplied Decimal? @db.Decimal(14, 2)
+  supplyValue      Decimal? @db.Decimal(14, 2)
+  /// Tried and dropped same-day (client direction: "Provided to Number of
+  /// Farmers hata do... upar production, neeche bas supply, simple") -
+  /// column kept, no form input writes to it any more.
+  providedToFarmers Int?
   generalMale   Int @default(0)
   generalFemale Int @default(0)
   obcMale       Int @default(0)
@@ -4011,10 +4060,14 @@ model FinancialProjectMaster {
 /// Thematic Area (real 3-level hierarchy, confirmed columns in
 /// lib/navigation.ts's trainingMaster group).
 model TrainingTypeMaster {
-  id     String @id @default(cuid())
+  id     String  @id @default(cuid())
   name   String
   zoneId String
-  zone   Zone   @relation(fields: [zoneId], references: [id])
+  zone   Zone    @relation(fields: [zoneId], references: [id])
+  /// "Mark as Other option" (client direction, 2026-09-13) - same convention
+  /// as every other master's isOther flag; this master never had one before,
+  /// so there was no working "Other" here until now.
+  isOther Boolean @default(false)
 
   areas TrainingAreaMaster[]
 

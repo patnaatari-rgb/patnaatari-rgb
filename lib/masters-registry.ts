@@ -570,17 +570,17 @@ const dedicated: Record<string, MasterLeafEntry> = {
   "training-type": {
     list: async (zoneId) => {
       const rows = await prisma.trainingTypeMaster.findMany({ where: { zoneId }, orderBy: { name: "asc" } });
-      return rows.map((r) => ({ id: r.id, trainingType: r.name }));
+      return rows.map((r) => ({ id: r.id, trainingType: r.name, _isOther: r.isOther ? "1" : "" }));
     },
     create: async (v, zoneId) => {
       const name = reqStr(v.trainingType);
       if (!name) throw new Error("Training type is required.");
-      return prisma.trainingTypeMaster.create({ data: { name, zoneId } });
+      return prisma.trainingTypeMaster.create({ data: { name, zoneId, isOther: bool(v.__markAsOther__) } });
     },
     update: async (id, v, zoneId) => {
       const name = reqStr(v.trainingType);
       if (!name) throw new Error("Training type is required.");
-      return prisma.trainingTypeMaster.updateMany({ where: { id, zoneId }, data: { name } });
+      return prisma.trainingTypeMaster.updateMany({ where: { id, zoneId }, data: { name, isOther: bool(v.__markAsOther__) } });
     },
     delete: (id, zoneId) => prisma.trainingTypeMaster.deleteMany({ where: { id, zoneId } }),
   },

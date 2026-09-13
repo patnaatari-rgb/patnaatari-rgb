@@ -380,15 +380,29 @@ export function MasterFormFields({
    * instead, so a year is never missing just because it's outside a fixed
    * window. Only fetched when this form actually has such a field.
    */
-  const needsRealYears = columns.some((c) => c.key === "reportingYear" && c.staticOptions);
+  const reportingYearColumn = columns.find((c) => c.key === "reportingYear" && c.staticOptions);
   const [realYears, setRealYears] = useState<string[]>([]);
   useEffect(() => {
-    if (!needsRealYears) return;
-    fetch("/api/reports/years")
+    if (!reportingYearColumn) return;
+    /**
+     * Client direction, 2026-09-13: scoped to this leaf's own model
+     * (`yearsModel`) - was the same shared, unscoped years-across-every-model-
+     * in-the-app result every other Reporting Year field used, so e.g.
+     * Vehicle Details' own dropdown could offer a year that only ever showed
+     * up in some unrelated leaf's data, never Vehicle Details' own. A
+     * `staticOptions` Reporting Year column without `yearsModel` set falls
+     * back to that old unscoped union rather than fetching nothing - every
+     * real one of these columns should set it, this is just the safe
+     * default for one that doesn't.
+     */
+    const url = reportingYearColumn.yearsModel
+      ? `/api/reports/years?model=${encodeURIComponent(reportingYearColumn.yearsModel)}`
+      : "/api/reports/years";
+    fetch(url)
       .then((res) => (res.ok ? res.json() : { years: [] }))
       .then((data) => setRealYears(data.years ?? []))
       .catch(() => {});
-  }, [needsRealYears]);
+  }, [reportingYearColumn, reportingYearColumn?.yearsModel]);
   /** Form-field render order only - list columns elsewhere always read the raw `columns` prop untouched. Stable sort (index tiebreak, not relying on Array.sort's own stability) so fields without a formOrder keep their original relative position, just pushed after every numbered field. */
   const orderedColumns = columns
     .map((column, index) => ({ column, index }))
@@ -460,12 +474,22 @@ export function MasterFormFields({
         }
 
         if (column.fieldKind === "calculated") {
+          // Live preview as the source fields are filled in, not just the
+          // stored value from a previous save (real bug, client report
+          // 2026-09-13 - this showed blank for the entire Add flow otherwise,
+          // only ever populated after a save+reload). Purely a preview: the
+          // server always recomputes this column itself from the same
+          // fields on save (leaf-record-registry.ts), so a derived render-time
+          // value here can never drift from what actually gets saved.
+          const displayValue = column.sumOf
+            ? String(column.sumOf.reduce((sum, key) => sum + (Number(formValues[key]) || 0), 0))
+            : (formValues[column.key] ?? "");
           return (
             <div key={column.key} className="space-y-1.5">
               <Label htmlFor={fieldId}>
                 {column.formLabel ?? column.label} <span className="text-destructive">*</span>
               </Label>
-              <Input id={fieldId} disabled value={formValues[column.key] ?? ""} className="h-10 bg-muted" />
+              <Input id={fieldId} disabled value={displayValue} className="h-10 bg-muted" />
               {column.helperText && <p className="text-xs text-muted-foreground">{column.helperText}</p>}
             </div>
           );

@@ -117,7 +117,8 @@ export function OftForm({ trail, backHref, id, initialView }: OftFormProps) {
       .then((res) => (res.ok ? res.json() : { rows: [] }))
       .then((data) => setSeasonOptions(uniqueNonEmpty((data.rows ?? []).map((r: Record<string, string>) => r.name))))
       .catch(() => {});
-    fetch("/api/reports/years")
+    /** Client direction, 2026-09-13: scoped to OFT's own model - was the same unscoped union every other Reporting Year field used, offering years from unrelated leaves too. */
+    fetch("/api/reports/years?model=oft")
       .then((res) => (res.ok ? res.json() : { years: [] }))
       .then((data) => setRealYears(data.years ?? []))
       .catch(() => {});
