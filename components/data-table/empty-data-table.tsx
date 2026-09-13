@@ -27,7 +27,7 @@ import {
 import type { SidebarIconName } from "@/lib/navigation";
 import { SIDEBAR_ICONS } from "@/components/layout/sidebar-icons";
 import { reportSubsectionForLeaf } from "@/lib/report-section-map";
-import type { ReportSection, ReportTable } from "@/lib/report-types";
+import type { ReportSection, ReportTable, ReportColumn, ReportBlock } from "@/lib/report-types";
 import { cn, downloadBlob } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { SimpleSelect } from "@/components/ui/simple-select";
@@ -790,34 +790,49 @@ export function EmptyDataTable({
       return sections;
     }
 
-    const scopeTable = (table: ReportTable): ReportTable => {
-      // Grouped (blocks) / pair tables and already-empty grids are left alone -
-      // only a plain columns+rows grid can be safely row-filtered by label.
-      if (table.blocks?.length || table.pairs?.length || table.rows.length === 0) {
-        return table;
-      }
-      const cols = table.columns;
+    /**
+     * Narrows one grid's own rows by every active filter, given just that
+     * grid's own column list - shared by a plain table (its own top-level
+     * columns) and, since the real bug fix below, every grid nested inside a
+     * `blocks` table (each block's own `parts[].columns`, which is all a
+     * per-KVK/per-group block ever declares - there's no shared top-level
+     * `columns` array on a blocks table for those rows to be matched against
+     * any other way).
+     */
+    const filterRowsByColumns = (
+      cols: ReportColumn[],
+      rows: Record<string, string>[],
+      opts: { search?: boolean } = {},
+    ) => {
+      if (rows.length === 0) return rows;
       const keyByLabel = new Map(cols.map((c) => [c.label, c.key]));
       // key -> key (report tables reuse the list's own column keys where they
-      // exist) and normalised-label -> key, so a filter matches even when the
-      // two sides spell the header slightly differently.
+      // exist), an explicit listKey alias (real bug fix, 2026-09-14: a
+      // report column that reads a Prisma field under a different name than
+      // the list's own column - e.g. Employee Details' list key "staffName"
+      // vs the "All KVK Staff" report's own "name" - where even the labels
+      // never lined up, so neither the key nor the normalised-label match
+      // below ever caught it), and normalised-label -> key, so a filter
+      // matches even when the two sides spell the header slightly differently.
       const keyByOwnKey = new Map(cols.map((c) => [c.key, c.key]));
+      const keyByListKey = new Map(cols.filter((c) => c.listKey).map((c) => [c.listKey as string, c.key]));
       const keyByNormLabel = new Map(cols.map((c) => [normLabel(c.label), c.key]));
       const reportKeyFor = (sel: { key: string; label: string }) =>
         keyByLabel.get(sel.label) ??
         keyByOwnKey.get(sel.key) ??
+        keyByListKey.get(sel.key) ??
         keyByNormLabel.get(normLabel(sel.label));
-      let rows = table.rows;
+      let out = rows;
       for (const sel of activeSelections) {
         const k = reportKeyFor(sel);
-        if (k) rows = rows.filter((r) => sel.allowed.has(String(r[k] ?? "")));
+        if (k) out = out.filter((r) => sel.allowed.has(String(r[k] ?? "")));
       }
       if (yearActive) {
         const yk = keyByLabel.get("Reporting Year") ?? keyByLabel.get("Year");
         const dks = dateLabels
           .map((l) => keyByLabel.get(l))
           .filter((k): k is string => Boolean(k));
-        rows = rows.filter((r) => {
+        out = out.filter((r) => {
           const yearRaw = yk ? String(r[yk] ?? "") : "";
           const dateVals = dks.map((k) => String(r[k] ?? "")).filter(Boolean);
           // Rows with no year at all (roster leaves) aren't year-filterable.
@@ -831,7 +846,7 @@ export function EmptyDataTable({
           .map((l) => keyByLabel.get(l))
           .filter((k): k is string => Boolean(k));
         if (dateKeys.length > 0) {
-          rows = rows.filter((r) =>
+          out = out.filter((r) =>
             dateKeys.some((k) => {
               const v = String(r[k] ?? "").slice(0, 10);
               if (!v) return false;
@@ -842,11 +857,59 @@ export function EmptyDataTable({
           );
         }
       }
-      if (q) {
-        rows = rows.filter((r) =>
+      if (q && opts.search !== false) {
+        out = out.filter((r) =>
           cols.some((c) => String(r[c.key] ?? "").toLowerCase().includes(q)),
         );
       }
+      return out;
+    };
+
+    /**
+     * Real bug fix, 2026-09-14: a `blocks` table used to be left completely
+     * untouched by every active filter - correct for a genuine rollup
+     * (FLD/OFT Summary, a per-sector or per-state total that doesn't map to
+     * any one record), but most `blocks` tables in this app are really just
+     * a flat per-record grid wrapped in one block per KVK (Staff Quarters,
+     * NICRA Others' own leaves, ARYA, Natural Farming, ...) - filtering the
+     * list and downloading always showed every KVK's rows regardless (client
+     * report, 2026-09-14: "select single, sab data aa gaya", reproduced
+     * across Training/Extension Activities/Publications/HRD/Staff Quarters/
+     * several Projects leaves). Recursing into each block's own grid parts
+     * and filtering their rows by their own columns fixes every one of
+     * these at once, without needing to know in advance which blocks table
+     * is a real rollup (an aggregate row's own column values just won't
+     * match a per-record filter selection, so it stays as-is either way).
+     */
+    const scopeBlocks = (blocks: ReportBlock[]): ReportBlock[] =>
+      blocks.map((block) => ({
+        ...block,
+        parts: block.parts.map((part) => {
+          if (part.kind !== "grid" || !part.columns?.length || part.rows.length === 0) return part;
+          // Search stays out of this recursion - a genuine rollup block
+          // (OFT's own zone-wide Discipline/Thematic-Area matrix) has no
+          // per-record text to match a free-text search against, so
+          // applying it here would wipe a real summary block to empty
+          // instead of leaving it whole. Column-value/year/date filters are
+          // safe (a column that doesn't exist on this block is just
+          // skipped, never used to wrongly empty it), so those still apply.
+          const rows = filterRowsByColumns(part.columns, part.rows, { search: false });
+          if (rows === part.rows) return part;
+          return { ...part, rows, totalRow: undefined };
+        }),
+      }));
+
+    const scopeTable = (table: ReportTable): ReportTable => {
+      // Pair tables (a numbered label/value list, not a grid) can't be
+      // row-filtered at all - left alone, same as always.
+      if (table.pairs?.length) return table;
+      if (table.blocks?.length) {
+        const blocks = scopeBlocks(table.blocks);
+        if (blocks === table.blocks) return table;
+        return { ...table, blocks };
+      }
+      if (table.rows.length === 0) return table;
+      const rows = filterRowsByColumns(table.columns, table.rows);
       if (rows === table.rows) return table;
       return { ...table, rows, totalRow: undefined };
     };
@@ -895,6 +958,26 @@ export function EmptyDataTable({
       } else if (hasActiveDates) {
         if (fromDate) query.set("from", fromDate);
         if (toDate) query.set("to", toDate);
+      }
+      /**
+       * The search box + every active per-column value checklist, so the few
+       * `blocks`-shaped builders that read `scope.listFilter` (see
+       * lib/report-types.ts's `applyListFilter`) can narrow their own raw
+       * records before grouping - the generic scopeReportSectionsToFilters
+       * below can only narrow a plain grid, never a `blocks` table (real bug,
+       * 2026-09-14: a filtered Training/Extension Activities/Poshan Maaha/
+       * Publications/HRD/Production & Supply/Staff Quarters/OFT download
+       * showed every record regardless). Harmless to always send: a builder
+       * that never reads `listFilter` just ignores it.
+       */
+      if (search.trim()) query.set("search", search.trim());
+      const activeColumnValues = Object.fromEntries(
+        Object.entries(columnFilters)
+          .filter(([, s]) => s.selected !== null)
+          .map(([key, s]) => [key, Array.from(s.selected as Set<string>)]),
+      );
+      if (Object.keys(activeColumnValues).length > 0) {
+        query.set("colf", JSON.stringify(activeColumnValues));
       }
 
       const res = await fetch(`/api/reports/generate?${query.toString()}`);

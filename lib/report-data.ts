@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { NF_COMPARISON_PARAMETERS } from "./report-types";
+import { NF_COMPARISON_PARAMETERS, applyListFilter } from "./report-types";
 import { parseResultTables } from "./oft-result-tables";
 
 /**
@@ -727,10 +727,22 @@ async function buildOftStateWiseDetails(scope: ReportScope): Promise<CustomTable
  */
 function buildOftKvkWiseDetails(codePrefix: string) {
   return async (scope: ReportScope): Promise<CustomTableResult> => {
-  const ofts = await prisma.oft.findMany({
+  const rawOfts = await prisma.oft.findMany({
     where: scopeAndPeriod(scope, "oft"),
     include: { kvk: { select: { name: true } }, technologyOptions: { orderBy: { id: "asc" } } },
     orderBy: [{ kvkId: "asc" }, { id: "asc" }],
+  });
+  // Real bug fix, 2026-09-14: one block per trial (both the KVK-scoped and
+  // zone-level tables use this same builder) - always `blocks`, which the
+  // generic client-side filter narrowing skips. Field keys match the list's
+  // own column keys (page.tsx's "oft" row mapping).
+  const ofts = applyListFilter(rawOfts, scope, {
+    kvk: (r) => r.kvk?.name ?? "",
+    reportingYear: (r) => String(r.reportingYear),
+    staff: (r) => r.staff,
+    trialOnForm: (r) => r.trialOnForm,
+    problemDiagnosed: (r) => r.problemDiagnosed ?? "",
+    status: (r) => (r.status === "COMPLETED" ? "Completed" : r.status === "TRANSFERRED" ? "Transferred to Next Year" : "Ongoing"),
   });
 
   const num = (v: unknown) => (v === null || v === undefined ? "-" : String(v));
@@ -1075,12 +1087,22 @@ async function buildSoilWaterAnalysis(scope: ReportScope): Promise<CustomTableRe
  * plain Journal Name for anything else. Reads the columns added 2026-09-03.
  */
 async function buildPublications(scope: ReportScope): Promise<CustomTableResult> {
-  const rows = await prisma.publication.findMany({
+  const rawRows = await prisma.publication.findMany({
     where: scopeAndPeriod(scope, "publication"),
     include: { kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { itemName: "asc" }, { id: "asc" }],
   });
-  type P = (typeof rows)[number];
+  type P = (typeof rawRows)[number];
+  // Real bug fix, 2026-09-14: always `blocks` (per-KVK, then per-item-type),
+  // which the generic client-side filter narrowing skips. Field keys match
+  // the list's own column keys (page.tsx's "publications" row mapping).
+  const rows = applyListFilter(rawRows, scope, {
+    kvk: (r: P) => r.kvk.name,
+    itemName: (r: P) => r.itemName,
+    title: (r: P) => r.title,
+    authorName: (r: P) => r.authorName,
+    journalName: (r: P) => r.journalName ?? "",
+  });
   const yearOf = (r: P) => (r.reportingDate ? String(new Date(r.reportingDate).getFullYear()) : "");
   const base: ReportColumn[] = [
     { key: "year", label: "Publication Year" },
@@ -1113,10 +1135,23 @@ async function buildPublications(scope: ReportScope): Promise<CustomTableResult>
 
 /** 2.11.A "Human Resources Development" (super-v2-prod.pdf p.54) - per KVK block. Duration is the inclusive day count between Start and End Date. */
 async function buildHrd(scope: ReportScope): Promise<CustomTableResult> {
-  const rows = await prisma.humanResourceDevelopment.findMany({
+  const rawRows = await prisma.humanResourceDevelopment.findMany({
     where: scopeAndPeriod(scope, "humanResourceDevelopment"),
     include: { kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { startDate: "asc" }],
+  });
+  // Real bug fix, 2026-09-14: always `blocks` (per-KVK), which the generic
+  // client-side filter narrowing skips. Field keys match the list's own
+  // column keys (page.tsx's "hrd" row mapping).
+  const dateStr = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+  const rows = applyListFilter(rawRows, scope, {
+    kvk: (r) => r.kvk.name,
+    staff: (r) => r.staff,
+    course: (r) => r.course,
+    startDate: (r) => dateStr(r.startDate),
+    endDate: (r) => dateStr(r.endDate),
+    venue: (r) => r.venue ?? "",
+    organizer: (r) => r.organizer ?? "",
   });
   const durationDays = (a: Date | null, b: Date | null) => {
     if (!a || !b) return "";
@@ -1233,17 +1268,48 @@ const FLD_SECTORS: { key: string; label: string; stateCols: FldStateCol[] }[] = 
 ];
 
 /**
- * "2.3.A FLD Summary" (super-v2-prod.pdf p.35) - a per-sector rollup of
- * FldDemonstrationDetail: 7 sector rows in the fixed order plus a Total row.
+ * Sum of the 8 caste/gender fields every Fld record carries directly (its
+ * own "Farmers Details" block) - the real "No. of beneficiaries"/"No. of
+ * farmers" source now that these builders read Fld itself, not the always-
+ * empty FldDemonstrationDetail (see the real bug fix note above
+ * buildFldSectorSummary).
+ */
+function fldFarmersOf(d: CasteRecord): number {
+  return d.generalMale + d.generalFemale + d.obcMale + d.obcFemale + d.scMale + d.scFemale + d.stMale + d.stFemale;
+}
+/** Fld has no separate `areaHa` column - "Area (ha)" is just its own Quantity when Unit is "Ha" (the Add FLD form's own rule, fld-form.tsx: Number-unit sectors report a count, every area-based sector reports Quantity in Ha). Non-Ha rows (a count, or an "Other" crop's free-text unit) contribute 0 here, same as they'd have no real area value in any source. */
+function fldAreaOf(d: { unit: string | null; quantity: unknown }): number {
+  return (d.unit ?? "").trim().toLowerCase() === "ha" ? Number(d.quantity ?? 0) : 0;
+}
+
+/**
+ * "2.3.A FLD Summary" (super-v2-prod.pdf p.35) - a per-sector rollup of the
+ * real Fld records: 7 sector rows in the fixed order plus a Total row.
  * FLDs/Demonstrations/Area/beneficiaries are plain sums; Yield in Demo/Check
  * is a demonstration-count-weighted average across the sector's rows (the
  * reference doesn't state its own formula - flagged for the client to check
  * against real multi-row data).
+ *
+ * Real bug fix, 2026-09-14 (client report: "database mein hai to zero kyun
+ * show ho raha hai") - this used to query FldDemonstrationDetail, a schema
+ * table meant for a real "one FLD, several demonstration-detail rows"
+ * feature (see its own doc comment in schema.prisma) that never got a data-
+ * entry UI built for it anywhere in the app - confirmed 0 rows in the whole
+ * database (every real Add FLD save goes to Fld itself, not this table), so
+ * every FLD Summary/State-wise/Details download showed nothing but zeros
+ * for every KVK, regardless of how much real FLD data existed. Fld itself
+ * already carries every field this table needs (sector, noOfDemonstration,
+ * quantity+unit for area, the caste fields, yieldDemoQha/yieldCheckQha via
+ * "Add Result") - querying it directly instead is a real fix, not a
+ * reinterpretation of what the report should show.
  */
 async function buildFldSectorSummary(scope: ReportScope): Promise<CustomTableResult> {
-  const details = await prisma.fldDemonstrationDetail.findMany({
-    where: scope.kvkId ? { fld: { kvkId: scope.kvkId } } : { zoneId: scope.zoneId },
-    select: { fldId: true, sector: true, noOfDemonstrations: true, areaHa: true, noOfFarmers: true, yieldDemoQha: true, yieldCheckQha: true },
+  const details = await prisma.fld.findMany({
+    where: scope.kvkId ? { kvkId: scope.kvkId } : { zoneId: scope.zoneId },
+    select: {
+      sector: true, noOfDemonstration: true, quantity: true, unit: true,
+      yieldDemoQha: true, yieldCheckQha: true, ...CASTE_SELECT,
+    },
   });
 
   const columns: ReportColumn[] = [
@@ -1261,7 +1327,7 @@ async function buildFldSectorSummary(scope: ReportScope): Promise<CustomTableRes
     let weight = 0;
     for (const r of rows) {
       if (r[key] === null) continue;
-      const w = r.noOfDemonstrations || 1;
+      const w = r.noOfDemonstration || 1;
       weightedSum += Number(r[key]) * w;
       weight += w;
     }
@@ -1273,10 +1339,10 @@ async function buildFldSectorSummary(scope: ReportScope): Promise<CustomTableRes
 
   for (const { key, label } of FLD_SECTORS) {
     const inSector = details.filter((d) => d.sector === key);
-    const flds = new Set(inSector.map((d) => d.fldId)).size;
-    const demos = inSector.reduce((s, d) => s + d.noOfDemonstrations, 0);
-    const area = inSector.reduce((s, d) => s + Number(d.areaHa), 0);
-    const beneficiaries = inSector.reduce((s, d) => s + d.noOfFarmers, 0);
+    const flds = inSector.length;
+    const demos = inSector.reduce((s, d) => s + (d.noOfDemonstration ?? 0), 0);
+    const area = inSector.reduce((s, d) => s + fldAreaOf(d), 0);
+    const beneficiaries = inSector.reduce((s, d) => s + fldFarmersOf(d), 0);
     total.flds += flds;
     total.demos += demos;
     total.area += area;
@@ -1318,10 +1384,16 @@ async function buildFldSectorSummary(scope: ReportScope): Promise<CustomTableRes
  * Implements" = sum noOfDemonstrations, area/"Unit" = sum areaHa.
  */
 async function buildFldStateWiseDetails(scope: ReportScope): Promise<CustomTableResult> {
+  // Real bug fix, 2026-09-14 - same root cause as buildFldSectorSummary
+  // above (was FldDemonstrationDetail, always empty): reads the real Fld
+  // records directly instead.
   const [details, states] = await Promise.all([
-    prisma.fldDemonstrationDetail.findMany({
-      where: scope.kvkId ? { fld: { kvkId: scope.kvkId } } : { zoneId: scope.zoneId },
-      select: { sector: true, noOfDemonstrations: true, areaHa: true, noOfFarmers: true, fld: { select: { kvk: { select: { state: { select: { name: true } } } } } } },
+    prisma.fld.findMany({
+      where: scope.kvkId ? { kvkId: scope.kvkId } : { zoneId: scope.zoneId },
+      select: {
+        sector: true, noOfDemonstration: true, quantity: true, unit: true, ...CASTE_SELECT,
+        kvk: { select: { state: { select: { name: true } } } },
+      },
     }),
     prisma.state.findMany({ where: { zoneId: scope.zoneId }, orderBy: { name: "asc" } }),
   ]);
@@ -1339,9 +1411,9 @@ async function buildFldStateWiseDetails(scope: ReportScope): Promise<CustomTable
   ];
 
   const sumField = (list: typeof details, field: FldStateCol["key"]) => {
-    if (field === "farmers") return list.reduce((s, d) => s + d.noOfFarmers, 0);
-    if (field === "demo") return list.reduce((s, d) => s + d.noOfDemonstrations, 0);
-    return list.reduce((s, d) => s + Number(d.areaHa), 0);
+    if (field === "farmers") return list.reduce((s, d) => s + fldFarmersOf(d), 0);
+    if (field === "demo") return list.reduce((s, d) => s + (d.noOfDemonstration ?? 0), 0);
+    return list.reduce((s, d) => s + fldAreaOf(d), 0);
   };
   const fmt = (field: FldStateCol["key"], v: number) => (field === "area" ? v.toFixed(2) : String(v));
 
@@ -1357,7 +1429,7 @@ async function buildFldStateWiseDetails(scope: ReportScope): Promise<CustomTable
   return {
     columns,
     noSerial: true,
-    rows: states.map((s) => ({ state: s.name, ...rowFor(details.filter((d) => d.fld.kvk.state.name === s.name)) })),
+    rows: states.map((s) => ({ state: s.name, ...rowFor(details.filter((d) => d.kvk.state.name === s.name)) })),
     totalRow: { state: "Total", ...rowFor(details) },
   };
 }
@@ -1417,30 +1489,38 @@ function fldDetailColumns(isImplements: boolean, singleKvk = false): ReportColum
   ];
 }
 
+/**
+ * Real bug fix, 2026-09-14 - same root cause as buildFldSectorSummary /
+ * buildFldStateWiseDetails above: reads Fld directly instead of the always-
+ * empty FldDemonstrationDetail. Fld covers every column here except the
+ * "Check" (farmer-practice) economics and the Farm Implements sector's own
+ * Labor/Cost reduction ("Other Parameters") - real fields that only ever
+ * existed on the unused FldDemonstrationDetail schema and were never added
+ * to the actual Add FLD / Add Result forms, so there's no real value to
+ * read for them anywhere. They render "-" (the function's own existing
+ * convention for a missing figure) rather than a guessed number; flagged
+ * for the client - closing that gap for real means adding those inputs to
+ * the live form first.
+ */
 function buildFldDetailsSubTable(sectorKey: string) {
   const isImplements = sectorKey === "Farm Implements and Machinery";
   return async (scope: ReportScope): Promise<CustomTableResult> => {
     const [details, stateNames] = await Promise.all([
-      prisma.fldDemonstrationDetail.findMany({
+      prisma.fld.findMany({
       where: {
         sector: sectorKey,
-        ...(scope.kvkId ? { fld: { kvkId: scope.kvkId } } : { zoneId: scope.zoneId }),
+        ...(scope.kvkId ? { kvkId: scope.kvkId } : { zoneId: scope.zoneId }),
       },
       select: {
-        cropOrItem: true, thematicArea: true, technologyDemonstrated: true, noOfDemonstrations: true, noOfFarmers: true, areaHa: true,
+        cropAnimalEnterprise: true, thematicArea: true, technologyDemonstrated: true, noOfDemonstration: true,
+        quantity: true, unit: true, ...CASTE_SELECT,
         yieldDemoQha: true, yieldCheckQha: true, percentIncrease: true,
         grossCostDemo: true, grossReturnDemo: true, netReturnDemo: true, bcrDemo: true,
-        grossCostCheck: true, grossReturnCheck: true, netReturnCheck: true, bcrCheck: true,
-        laborReductionManDays: true, costReductionRs: true,
-        fld: {
-          select: {
-            category: true,
-            subCategory: true,
-            kvk: { select: { state: { select: { name: true } } } },
-          },
-        },
+        category: true,
+        subCategory: true,
+        kvk: { select: { state: { select: { name: true } } } },
       },
-      orderBy: [{ cropOrItem: "asc" }],
+      orderBy: [{ cropAnimalEnterprise: "asc" }],
       }),
       reportStates(scope.zoneId),
     ]);
@@ -1449,13 +1529,14 @@ function buildFldDetailsSubTable(sectorKey: string) {
     }
 
     type Row = (typeof details)[number];
+    const cropOf = (d: Row) => d.cropAnimalEnterprise?.trim() || d.technologyDemonstrated;
     const wavg = (rows: Row[], get: (d: Row) => unknown): number | null => {
       let weightedSum = 0;
       let weight = 0;
       for (const r of rows) {
         const v = get(r);
         if (v === null || v === undefined) continue;
-        const w = r.noOfDemonstrations || 1;
+        const w = r.noOfDemonstration || 1;
         weightedSum += Number(v) * w;
         weight += w;
       }
@@ -1466,10 +1547,10 @@ function buildFldDetailsSubTable(sectorKey: string) {
     const singleKvk = !!scope.kvkId;
     const columns = fldDetailColumns(isImplements, singleKvk);
     /** The crop-type level of the sub-heading ("Cereals of Crop Production") is the FLD's own Category (Sector -> Category -> Sub Category -> Crop cascade), falling back to Sub Category then Thematic Area. */
-    const groupLabelOf = (d: Row) => d.fld.category?.trim() || d.fld.subCategory?.trim() || d.thematicArea?.trim() || "";
+    const groupLabelOf = (d: Row) => d.category?.trim() || d.subCategory?.trim() || d.thematicArea?.trim() || "";
     const blocks: ReportBlock[] = [...groupInto(details, groupLabelOf).entries()].map(
       ([category, groupRows]) => {
-        const crops = [...new Set(groupRows.map((d) => d.cropOrItem))];
+        const crops = [...new Set(groupRows.map(cropOf))];
         const gridRows: Record<string, string>[] = [];
         for (const crop of crops) {
           // Single-KVK: one aggregated row per crop, no per-state split.
@@ -1478,32 +1559,34 @@ function buildFldDetailsSubTable(sectorKey: string) {
             : stateNames.map((state, stateIndex) => ({ state, stateIndex }));
           iters.forEach(({ state, stateIndex }) => {
             const match = groupRows.filter(
-              (d) => d.cropOrItem === crop && (singleKvk || d.fld.kvk.state.name === state),
+              (d) => cropOf(d) === crop && (singleKvk || d.kvk.state.name === state),
             );
             const row: Record<string, string> = {
               crop: stateIndex === 0 ? crop : "",
               state,
               thematic: match[0]?.thematicArea ?? "",
               tech: match[0]?.technologyDemonstrated ?? "",
-              demos: String(match.reduce((s, d) => s + d.noOfDemonstrations, 0)),
-              farmers: String(match.reduce((s, d) => s + d.noOfFarmers, 0)),
-              area: match.reduce((s, d) => s + Number(d.areaHa), 0).toFixed(2),
+              demos: String(match.reduce((s, d) => s + (d.noOfDemonstration ?? 0), 0)),
+              farmers: String(match.reduce((s, d) => s + fldFarmersOf(d), 0)),
+              area: match.reduce((s, d) => s + fldAreaOf(d), 0).toFixed(2),
               yieldDemo: dash(wavg(match, (d) => d.yieldDemoQha)),
               yieldCheck: dash(wavg(match, (d) => d.yieldCheckQha)),
               pctInc: dash(wavg(match, (d) => d.percentIncrease)),
             };
             if (isImplements) {
-              row.labor = dash(wavg(match, (d) => d.laborReductionManDays));
-              row.cost = dash(wavg(match, (d) => d.costReductionRs));
+              // No real source field for either (see the function's own doc comment above).
+              row.labor = "-";
+              row.cost = "-";
             } else {
               row.gcDemo = dash(wavg(match, (d) => d.grossCostDemo));
               row.grDemo = dash(wavg(match, (d) => d.grossReturnDemo));
               row.nrDemo = dash(wavg(match, (d) => d.netReturnDemo));
               row.bcrDemo = dash(wavg(match, (d) => d.bcrDemo));
-              row.gcCheck = dash(wavg(match, (d) => d.grossCostCheck));
-              row.grCheck = dash(wavg(match, (d) => d.grossReturnCheck));
-              row.nrCheck = dash(wavg(match, (d) => d.netReturnCheck));
-              row.bcrCheck = dash(wavg(match, (d) => d.bcrCheck));
+              // No real "Check" (farmer-practice) economics field either.
+              row.gcCheck = "-";
+              row.grCheck = "-";
+              row.nrCheck = "-";
+              row.bcrCheck = "-";
             }
             gridRows.push(row);
           });
@@ -1511,10 +1594,16 @@ function buildFldDetailsSubTable(sectorKey: string) {
         const sectorLabel = FLD_SECTORS.find((s) => s.key === sectorKey)?.label ?? sectorKey;
         const on = category || sectorLabel;
         return {
-          heading:
-            sectorKey === "Crop Production" && category
-              ? `Details of Front-Line Demonstration on ${on} of Crop Production`
-              : `Details of Front-Line Demonstration on ${on}`,
+          // Real bug fix, 2026-09-14 - found while verifying the
+          // FldDemonstrationDetail fix above (this heading was never
+          // reachable before, since the table was always empty): a Crop
+          // Production category value already reads "Cereals of Crop
+          // Production" (confirmed against super-v2-prod.pdf p.36's own
+          // real headings - "Details of Front-Line Demonstration on Cereals
+          // of Crop Production", never a doubled "... of Crop Production of
+          // Crop Production"), so appending " of Crop Production" again was
+          // always wrong once real data reached this line.
+          heading: `Details of Front-Line Demonstration on ${on}`,
           parts: [{ kind: "grid", noSerial: true, columns, rows: gridRows }],
         };
       },
@@ -1607,19 +1696,51 @@ const DOUBLE_CASTE_SELECT = {
  * fields read literally from the titles; flagged for the client to confirm.)
  */
 async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
-  const [trainings, states] = await Promise.all([
+  const [rawTrainings, states] = await Promise.all([
     prisma.training.findMany({
       where: scopeAndPeriod(scope, "training"),
       select: {
         ...CASTE_SELECT,
+        reportingYear: true, venue: true, trainingDiscipline: true, courseCoordinator: true, fundingSource: true,
         clientele: true, trainingType: true, trainingArea: true, thematicArea: true,
         onCampusOffCampus: true, title: true, program: true, startDate: true, endDate: true, fundingAgencyName: true,
-        kvk: { select: { state: { select: { name: true } } } },
+        kvk: { select: { name: true, state: { select: { name: true } } } },
       },
     }),
     prisma.state.findMany({ where: { zoneId: scope.zoneId }, orderBy: { name: "asc" } }),
   ]);
-  type T = (typeof trainings)[number];
+  type T = (typeof rawTrainings)[number];
+  // Real bug fix, 2026-09-14: this table is built entirely from `blocks`
+  // (state-wise + training-area/thematic-area consolidations), which the
+  // generic client-side filter narrowing explicitly skips - so a filtered
+  // Trainings list always downloaded every record. Field keys match the
+  // list's own column keys exactly (page.tsx's "trainings" row mapping).
+  const dateStr = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+  const trainings = applyListFilter(rawTrainings, scope, {
+    reportingYear: (t: T) => String(t.reportingYear),
+    kvk: (t: T) => t.kvk.name,
+    startDate: (t: T) => dateStr(t.startDate),
+    endDate: (t: T) => dateStr(t.endDate),
+    title: (t: T) => t.title,
+    venue: (t: T) => t.venue ?? "",
+    trainingDiscipline: (t: T) => t.trainingDiscipline ?? "",
+    thematicArea: (t: T) => t.thematicArea ?? "",
+    clientele: (t: T) => t.clientele ?? "",
+    trainingType: (t: T) => t.trainingType ?? "",
+    trainingArea: (t: T) => t.trainingArea ?? "",
+    onCampusOffCampus: (t: T) => t.onCampusOffCampus ?? "",
+    courseCoordinator: (t: T) => t.courseCoordinator ?? "",
+    fundingSource: (t: T) => t.fundingSource ?? "",
+    fundingAgencyName: (t: T) => t.fundingAgencyName ?? "",
+    generalMale: (t: T) => String(t.generalMale),
+    generalFemale: (t: T) => String(t.generalFemale),
+    obcMale: (t: T) => String(t.obcMale),
+    obcFemale: (t: T) => String(t.obcFemale),
+    scMale: (t: T) => String(t.scMale),
+    scFemale: (t: T) => String(t.scFemale),
+    stMale: (t: T) => String(t.stMale),
+    stFemale: (t: T) => String(t.stFemale),
+  });
 
   // --- State-wise ---
   const stateColumns: ReportColumn[] = [
@@ -1803,19 +1924,51 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
  * (Farmers + Extension Officials) and a combined Total M/F/T.
  */
 async function buildExtensionActivities(scope: ReportScope): Promise<CustomTableResult> {
-  const [rows, stateNames] = await Promise.all([
+  const [rawRows, stateNames] = await Promise.all([
     prisma.extensionActivity.findMany({
       where: scopeAndPeriod(scope, "extensionActivity"),
       select: {
+        reportingYear: true, startDate: true, endDate: true, noOfParticipants: true, staff: true,
         natureOfExtensionActivity: true,
         noOfActivities: true,
         ...DOUBLE_CASTE_SELECT,
-        kvk: { select: { state: { select: { name: true } } } },
+        kvk: { select: { name: true, state: { select: { name: true } } } },
       },
     }),
     reportStates(scope.zoneId),
   ]);
-  type R = (typeof rows)[number];
+  type R = (typeof rawRows)[number];
+  // Real bug fix, 2026-09-14: built entirely from `blocks` (state-wise +
+  // by-nature groupings), which the generic client-side filter narrowing
+  // skips. Field keys match the list's own column keys (page.tsx's
+  // "extension-activities" row mapping).
+  const dateStr = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+  const rows = applyListFilter(rawRows, scope, {
+    kvk: (r: R) => r.kvk.name,
+    reportingYear: (r: R) => String(r.reportingYear),
+    startDate: (r: R) => dateStr(r.startDate),
+    endDate: (r: R) => dateStr(r.endDate),
+    natureOfExtensionActivity: (r: R) => r.natureOfExtensionActivity,
+    noOfActivities: (r: R) => String(r.noOfActivities),
+    noOfParticipants: (r: R) => String(r.noOfParticipants),
+    staff: (r: R) => r.staff ?? "",
+    farmersGeneralMale: (r: R) => String(r.farmersGeneralMale),
+    farmersGeneralFemale: (r: R) => String(r.farmersGeneralFemale),
+    farmersObcMale: (r: R) => String(r.farmersObcMale),
+    farmersObcFemale: (r: R) => String(r.farmersObcFemale),
+    farmersScMale: (r: R) => String(r.farmersScMale),
+    farmersScFemale: (r: R) => String(r.farmersScFemale),
+    farmersStMale: (r: R) => String(r.farmersStMale),
+    farmersStFemale: (r: R) => String(r.farmersStFemale),
+    officialsGeneralMale: (r: R) => String(r.officialsGeneralMale),
+    officialsGeneralFemale: (r: R) => String(r.officialsGeneralFemale),
+    officialsObcMale: (r: R) => String(r.officialsObcMale),
+    officialsObcFemale: (r: R) => String(r.officialsObcFemale),
+    officialsScMale: (r: R) => String(r.officialsScMale),
+    officialsScFemale: (r: R) => String(r.officialsScFemale),
+    officialsStMale: (r: R) => String(r.officialsStMale),
+    officialsStFemale: (r: R) => String(r.officialsStFemale),
+  });
 
   const mkColumns = (firstKey: string, firstLabel: string): ReportColumn[] => [
     { key: firstKey, label: firstLabel },
@@ -2118,7 +2271,7 @@ function perKvkBlocks<R extends { kvk: { name: string } }>(
  * KVKs)" block.
  */
 async function buildWorldSoilDay(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.worldSoilDay.findMany({
+  const rawRecords = await prisma.worldSoilDay.findMany({
     where: scopeAndPeriod(scope, "worldSoilDay"),
     select: {
       reportingYear: true, noOfActivitiesConducted: true, soilHealthCardsDistributed: true,
@@ -2127,7 +2280,22 @@ async function buildWorldSoilDay(scope: ReportScope): Promise<CustomTableResult>
     },
     orderBy: [{ kvkId: "asc" }, { reportingYear: "asc" }],
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14: the Super Admin (zone-level) view is always
+  // `blocks` (per-KVK), which the generic client-side filter narrowing
+  // skips - the KVK-scoped view is already a flat grid and was fine. Field
+  // keys match the list's own column keys (page.tsx's "world-soil-day" row
+  // mapping) - reportingYear there is rendered as a date picker, so the
+  // list's own filter checklist shows "yyyy-01-01", not a bare year.
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    reportingYear: (r: R) => (r.reportingYear !== null ? `${r.reportingYear}-01-01` : ""),
+    noOfActivitiesConducted: (r: R) => String(r.noOfActivitiesConducted),
+    soilHealthCardsDistributed: (r: R) => String(r.soilHealthCardsDistributed),
+    noOfVip: (r: R) => String(r.noOfVip),
+    vipNames: (r: R) => r.vipNames ?? "",
+    totalParticipants: (r: R) => String(r.totalParticipants),
+  });
 
   const columns: ReportColumn[] = [
     { key: "sl", label: "Sl." },
@@ -2181,7 +2349,7 @@ async function buildWorldSoilDay(scope: ReportScope): Promise<CustomTableResult>
 
 /** "2.6.D Poshan Maah" (super-v2-prod.pdf p.41) - per KVK, one row per datewise activity. */
 async function buildPoshanMaah(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.poshanMaaha.findMany({
+  const rawRecords = await prisma.poshanMaaha.findMany({
     where: scopeAndPeriod(scope, "poshanMaaha"),
     select: {
       activityDate: true, activitiesConducted: true, eventName: true, saplingsPlanted: true, vegetableKits: true,
@@ -2191,7 +2359,25 @@ async function buildPoshanMaah(scope: ReportScope): Promise<CustomTableResult> {
     },
     orderBy: [{ kvkId: "asc" }, { activityDate: "asc" }],
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14: always `blocks` (per-KVK) - the generic
+  // client-side filter narrowing skips it. Field keys match the list's own
+  // column keys (page.tsx's "poshan-maaha" row mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    activityDate: (r: R) => r.activityDate.toISOString().slice(0, 10),
+    activitiesConducted: (r: R) => r.activitiesConducted,
+    eventName: (r: R) => r.eventName,
+    saplingsPlanted: (r: R) => String(r.saplingsPlanted),
+    vegetableKits: (r: R) => String(r.vegetableKits),
+    participantsGirls: (r: R) => String(r.participantsGirls),
+    participantsPublicRepresentatives: (r: R) => String(r.participantsPublicRepresentatives),
+    participantsFarmWoman: (r: R) => String(r.participantsFarmWoman),
+    participantsFarmers: (r: R) => String(r.participantsFarmers),
+    participantsAganwadiWorkers: (r: R) => String(r.participantsAganwadiWorkers),
+    participantsGovtOfficials: (r: R) => String(r.participantsGovtOfficials),
+    totalParticipants: (r: R) => String(r.totalParticipants),
+  });
 
   // super-v2-prod.pdf p.41: the six participant categories sit under the "No.
   // of participants" group header; "Total Participants" is its own column
@@ -2359,15 +2545,17 @@ async function buildTechnicalAchievementSummary(scope: ReportScope): Promise<Cus
   // `reportingYear` (identical clause), the production table by its
   // `reportingDate`, targets by `reportingYear`.
   const yearWhere = { ...where, ...periodClause(scope, "oft") };
-  const [ofts, flds, fldArea, trainings, extensions, otherExt, production, targets] = await Promise.all([
+  const [ofts, flds, trainings, extensions, otherExt, production, targets] = await Promise.all([
     prisma.oft.findMany({ where: yearWhere, select: { noOfLocation: true, noOfTrialReplicationFarmer: true, ...CASTE_SELECT } }),
-    prisma.fld.findMany({ where: yearWhere, select: { ...CASTE_SELECT } }),
-    prisma.fldDemonstrationDetail
-      .aggregate({
-        where: scope.kvkId ? { fld: { kvkId: scope.kvkId } } : { zoneId: scope.zoneId },
-        _sum: { areaHa: true },
-      })
-      .then((a) => Number(a._sum.areaHa ?? 0)),
+    // quantity/unit added, 2026-09-14 (real bug fix) - the FLD mini-grid's own
+    // "Area" cell used to sum FldDemonstrationDetail.areaHa, a schema table
+    // with 0 rows in the whole database (no data-entry UI was ever built for
+    // it), so this always showed 0.00 no matter how much real FLD data
+    // existed. Fld's own Quantity is the real Area value for every Ha-unit
+    // sector (fldAreaOf, same helper the FLD Summary/State-wise/Details
+    // report tables now use for the same reason) - already fetched here for
+    // the caste block, so no extra round trip.
+    prisma.fld.findMany({ where: yearWhere, select: { quantity: true, unit: true, ...CASTE_SELECT } }),
     prisma.training.findMany({ where: yearWhere, select: { ...CASTE_SELECT } }),
     prisma.extensionActivity.findMany({ where: yearWhere, select: { noOfActivities: true, ...DOUBLE_CASTE_SELECT } }),
     prisma.otherExtensionActivity.findMany({ where: yearWhere, select: { natureOfExtensionActivity: true, noOfActivities: true } }),
@@ -2431,7 +2619,7 @@ async function buildTechnicalAchievementSummary(scope: ReportScope): Promise<Cus
         { group: "Number of FLDs", cols: [{ key: "area", label: "Area" }] },
       ],
       "Number of Farmers", true,
-      { target: targetOf("FLD"), ach: String(flds.length), area: fldArea.toFixed(2) },
+      { target: targetOf("FLD"), ach: String(flds.length), area: flds.reduce((s, f) => s + fldAreaOf(f), 0).toFixed(2) },
       flds),
     miniGrid("Training",
       [{ group: "Number of Courses", cols: [{ key: "target", label: "Target" }, { key: "ach", label: "Achievement" }] }],
@@ -2498,13 +2686,13 @@ async function buildTechnicalAchievementSummary(scope: ReportScope): Promise<Cus
  * counts.
  */
 async function buildProductionAndSupply(scope: ReportScope): Promise<CustomTableResult> {
-  const [records, stateNames, masterCats] = await Promise.all([
+  const [rawRecords, stateNames, masterCats] = await Promise.all([
     prisma.technologyProductProduction.findMany({
       where: scopeAndPeriod(scope, "technologyProductProduction"),
       select: {
-        productCategory: true, productType: true, product: true, category: true, variety: true, unit: true,
+        reportingYear: true, productCategory: true, productType: true, product: true, category: true, variety: true, unit: true,
         quantity: true, value: true, ...CASTE_SELECT,
-        kvk: { select: { state: { select: { name: true } } } },
+        kvk: { select: { name: true, state: { select: { name: true } } } },
       },
     }),
     reportStates(scope.zoneId),
@@ -2514,8 +2702,20 @@ async function buildProductionAndSupply(scope: ReportScope): Promise<CustomTable
       select: { name: true },
     }),
   ]);
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14: built entirely from `blocks` (per Category ->
+  // Unit/Type groupings), which the generic client-side filter narrowing
+  // skips - a filtered Production & Supply list always downloaded every
+  // record. Field keys match the list's own column keys (page.tsx's
+  // "production-supply" row mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    reportingYear: (r: R) => (r.reportingYear != null ? String(r.reportingYear) : ""),
+    productCategory: (r: R) => r.productCategory ?? "",
+    variety: (r: R) => r.variety ?? "",
+    quantity: (r: R) => String(r.quantity),
+  });
   if (records.length === 0) return {};
-  type R = (typeof records)[number];
 
   const farmersOf = (list: R[]) => list.reduce((s, r) => s + CASTE_SUM_FIELDS.reduce((a, f) => a + r[f], 0), 0);
   const qty = (list: R[]) => list.reduce((s, r) => s + Number(r.quantity ?? 0), 0);
@@ -2698,9 +2898,18 @@ function buildSubPlanByType(type: "TSP" | "SCSP") {
       // kvk-report p.36: single-state "Name of Activities | No. of Trainings/Demos
       // | No. of Farmers" table, then b. Fund received, c. physical outcome, d.
       // Location & Beneficiary Details (from the locationBeneficiaries JSON).
-      const recs = await prisma.subPlanActivity.findMany({
+      const rawRecs = await prisma.subPlanActivity.findMany({
         where: { type, kvkId: scope.kvkId },
         select: { activities: true, noOfTraining: true, beneficiaries: true, fundReceivedLakh: true, physicalOutcomeNote: true, locationBeneficiaries: true },
+      });
+      // Real bug fix, 2026-09-14 - blocks (grouped by fixed activity name).
+      // Field keys match the list's own column keys (page.tsx's
+      // "view-sub-plan-activity" mapping) - `type`/`kvk` aren't filterable
+      // here since this branch is already scoped to one KVK and one type.
+      const recs = applyListFilter(rawRecs, scope, {
+        activities: (r) => r.activities,
+        noOfTraining: (r) => String(r.noOfTraining),
+        beneficiaries: (r) => String(r.beneficiaries),
       });
       const planLabel = type === "TSP" ? "Tribal Sub Plan (TSP)" : "Scheduled Caste Sub Plan (SCSP)";
       const aRows = SUB_PLAN_ACTIVITY_ORDER.map((activity, i) => {
@@ -2806,16 +3015,35 @@ const NARI_ACTIVITY_ORDER = ["OFT", "FLD", "Not Specified"];
  * `countField`/`countLabel` are the one thing that differs per model.
  */
 /** kvk-report p.36-38: NARI's per-village detail grids + secondary "each Beneficiary" tables. */
+/** The list's own column keys per NARI model (page.tsx's own row mapping for each "nari-..." leaf) - varies per model, `kvk`/`nutriSmartVillage` shared by all five. */
+const NARI_LIST_KEYS: Record<string, string[]> = {
+  nariNutritionGarden: ["kvk", "nutriSmartVillage", "typeOfNutritionalGarden", "numbers", "areaSqm"],
+  nariBioFortified: ["kvk", "nutriSmartVillage", "season", "activity", "categoryOfCrop"],
+  nariValueAddition: ["kvk", "nutriSmartVillage", "cropName", "valueAddedProduct", "activity"],
+  nariTraining: ["kvk", "nutriSmartVillage", "areaOfTraining", "activity", "titleOfTraining"],
+  nariExtension: ["kvk", "nutriSmartVillage", "activity", "nameOfActivity", "noOfActivities"],
+};
+
 function buildNariKvk(
   model: "nariNutritionGarden" | "nariBioFortified" | "nariValueAddition" | "nariTraining" | "nariExtension",
 ) {
-  return async (kvkId: string): Promise<CustomTableResult> => {
+  return async (scope: ReportScope): Promise<CustomTableResult> => {
+    const kvkId = scope.kvkId as string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const records: Record<string, any>[] = await (prisma as any)[model].findMany({
+    const rawRecords: Record<string, any>[] = await (prisma as any)[model].findMany({
       where: { kvkId },
       include: { kvk: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
     });
+    // Real bug fix, 2026-09-14 - blocks/pairs, per village or per record.
+    // Field keys match the corresponding list's own column keys.
+    const records = applyListFilter(
+      rawRecords,
+      scope,
+      Object.fromEntries(
+        NARI_LIST_KEYS[model].map((key) => [key, (r: Record<string, unknown>) => (key === "kvk" ? (r.kvk as { name: string })?.name ?? "" : String(r[key] ?? ""))]),
+      ),
+    );
     const casteOf = (r: Record<string, unknown>): CasteRecord => ({
       generalMale: Number(r.male ?? 0), generalFemale: Number(r.female ?? 0),
       obcMale: Number(r.obcMale ?? 0), obcFemale: Number(r.obcFemale ?? 0),
@@ -2931,7 +3159,7 @@ function buildNariByActivity(
 ) {
   const kvkVariant = buildNariKvk(model);
   return async (scope: ReportScope) => {
-    if (scope.kvkId) return kvkVariant(scope.kvkId);
+    if (scope.kvkId) return kvkVariant(scope);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const delegate = (prisma as any)[model];
     const rows: { activity: string; count: number; male: number; female: number; kvk: { state: { name: string } } }[] =
@@ -3138,10 +3366,19 @@ const MONTH_NAMES = [
  * block per StaffQuarters record.
  */
 async function buildStaffQuarters(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.staffQuarters.findMany({
+  const rawRecords = await prisma.staffQuarters.findMany({
     where: scopeAndPeriod(scope, "staffQuarters"),
     include: { kvk: { select: { name: true } }, occupancy: true },
     orderBy: { kvk: { name: "asc" } },
+  });
+  // Real bug fix, 2026-09-14: one composite block per record - the generic
+  // client-side filter narrowing skips any `blocks` table. Field keys match
+  // the list's own column keys (page.tsx's "staff-quarters" row mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk?.name ?? "",
+    noOfStaffQuarters: (r) => String(r.numberOfQuarters),
+    dateOfCompletion: (r) => (r.dateOfCompletion ? r.dateOfCompletion.toISOString().slice(0, 10) : ""),
+    remark: (r) => r.remark ?? "",
   });
 
   // super-v2-prod.pdf p.15-16 and the 50pg kvk-report both print this
@@ -3227,7 +3464,11 @@ async function buildVehicleStatus(scope: ReportScope): Promise<CustomTableResult
     { key: "year", label: "Year" },
     { key: "kvk", label: "KVK" },
     ...(withType ? [{ key: "vtype", label: "Vehicle Type" }] : []),
-    { key: "vehicle", label: withType ? "Vehicle Name" : "Vehicle" }, // kvk-report says "Vehicle Name", super-v2-prod just "Vehicle"
+    // listKey: 2026-09-14 fix - the label only lines up with the list's own
+    // "Vehicle Name" for a KVK-scoped download (super-v2-prod's own "Vehicle"
+    // label doesn't), so a Super Admin filtering the Vehicle Details list and
+    // downloading still needs the key match to actually narrow it.
+    { key: "vehicle", label: withType ? "Vehicle Name" : "Vehicle", listKey: "vehicleName" },
     { key: "reg", label: "Registration No." },
     { key: "yop", label: "Year of purchase" },
     { key: "cost", label: "Cost (Rs.)" },
@@ -4050,7 +4291,7 @@ function kvkBlocksWithGrandTotal<R extends { kvk: { name: string } }>(
 
 /** 3.1.B "CFLD Extension Activity" (super-v2-prod.pdf p.57-58) - per KVK, one row per activity with the General/OBC/SC/ST/Total M/F/T farmer block. */
 async function buildCfldExtensionActivity(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.cfldExtensionActivity.findMany({
+  const rawRecords = await prisma.cfldExtensionActivity.findMany({
     where: scopeAndPeriod(scope, "cfldExtensionActivity"),
     select: {
       activitiesOrganized: true, season: true, date: true, placeOfActivity: true, ...CASTE_SELECT,
@@ -4058,7 +4299,25 @@ async function buildCfldExtensionActivity(scope: ReportScope): Promise<CustomTab
     },
     orderBy: [{ kvkId: "asc" }, { date: "asc" }],
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK), same class as the
+  // Achievements-section builders fixed earlier today. Field keys match the
+  // list's own column keys (page.tsx's "extension-activity-cfld" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    season: (r: R) => r.season,
+    activitiesOrganized: (r: R) => r.activitiesOrganized,
+    date: (r: R) => r.date.toISOString().slice(0, 10),
+    placeOfActivity: (r: R) => r.placeOfActivity,
+    generalMale: (r: R) => String(r.generalMale),
+    generalFemale: (r: R) => String(r.generalFemale),
+    obcMale: (r: R) => String(r.obcMale),
+    obcFemale: (r: R) => String(r.obcFemale),
+    scMale: (r: R) => String(r.scMale),
+    scFemale: (r: R) => String(r.scFemale),
+    stMale: (r: R) => String(r.stMale),
+    stFemale: (r: R) => String(r.stFemale),
+  });
   const columns: ReportColumn[] = [
     { key: "activity", label: "Extension Activities organized" },
     { key: "season", label: "Season" },
@@ -4078,12 +4337,23 @@ async function buildCfldExtensionActivity(scope: ReportScope): Promise<CustomTab
 
 /** 3.3.A "NICRA Intervention" (super-v2-prod.pdf p.60) - per KVK, seed/fodder bank rows with a quantity sub-total. */
 async function buildNicraIntervention(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraIntervention.findMany({
+  const rawRecords = await prisma.nicraIntervention.findMany({
     where: scopeAndPeriod(scope, "nicraIntervention"),
     select: { seedBankFodderBank: true, crop: true, variety: true, quantityQuintal: true, startDate: true, endDate: true, kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { startDate: "asc" }],
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "intervention" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    startDate: (r: R) => r.startDate.toISOString().slice(0, 10),
+    endDate: (r: R) => r.endDate.toISOString().slice(0, 10),
+    seedBankFodderBank: (r: R) => r.seedBankFodderBank,
+    crop: (r: R) => r.crop,
+    variety: (r: R) => r.variety,
+    quantity: (r: R) => String(r.quantityQuintal),
+  });
   const columns: ReportColumn[] = [
     { key: "bankType", label: "Bank Type" },
     { key: "crop", label: "Crop" },
@@ -4130,12 +4400,22 @@ async function buildNicraRevenue(scope: ReportScope): Promise<CustomTableResult>
 
 /** 3.3.F "NICRA Convergence Programme" (super-v2-prod.pdf p.61-62) - per KVK, scheme rows with a count + amount sub-total. */
 async function buildNicraConvergence(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraConvergenceProgramme.findMany({
+  const rawRecords = await prisma.nicraConvergenceProgramme.findMany({
     where: scopeAndPeriod(scope, "nicraConvergenceProgramme"),
     select: { scheme: true, natureOfWork: true, amount: true, startDate: true, endDate: true, kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { startDate: "asc" }],
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "convergence-programme" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    startDate: (r: R) => r.startDate.toISOString().slice(0, 10),
+    endDate: (r: R) => r.endDate.toISOString().slice(0, 10),
+    kvk: (r: R) => r.kvk.name,
+    scheme: (r: R) => r.scheme,
+    natureOfWork: (r: R) => r.natureOfWork,
+    amount: (r: R) => String(r.amount),
+  });
   const columns: ReportColumn[] = [
     { key: "kvk", label: "KVK" },
     { key: "start", label: "Start Date" },
@@ -4163,12 +4443,20 @@ async function buildNicraConvergence(scope: ReportScope): Promise<CustomTableRes
 
 /** 3.3.G "NICRA Dignitaries Visited" (super-v2-prod.pdf p.62) - per KVK, one row per visit + a visit count. */
 async function buildNicraDignitaries(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraDignitaryVisit.findMany({
+  const rawRecords = await prisma.nicraDignitaryVisit.findMany({
     where: scopeAndPeriod(scope, "nicraDignitaryVisit"),
     select: { vipExperts: true, name: true, dateOfVisit: true, remark: true, kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { dateOfVisit: "asc" }],
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "dignitaries-visited-nicra-villages" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    vipExperts: (r: R) => r.vipExperts,
+    name: (r: R) => r.name,
+    dateOfVisit: (r: R) => r.dateOfVisit.toISOString().slice(0, 10),
+  });
   const columns: ReportColumn[] = [
     { key: "date", label: "Date of Visit" },
     { key: "type", label: "Dignitary Type" },
@@ -4183,10 +4471,19 @@ async function buildNicraDignitaries(scope: ReportScope): Promise<CustomTableRes
 
 /** 3.3.H "NICRA PI/Co-PI List" (super-v2-prod.pdf p.62) - per KVK. */
 async function buildNicraPiCoPi(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraPiCoPi.findMany({
+  const rawRecords = await prisma.nicraPiCoPi.findMany({
     where: scopeAndPeriod(scope, "nicraPiCoPi"),
     include: { kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { startDate: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "pi-co-pi-list" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    startDate: (r) => r.startDate.toISOString().slice(0, 10),
+    endDate: (r) => r.endDate.toISOString().slice(0, 10),
+    kvk: (r) => r.kvk.name,
+    piCoPi: (r) => r.piCoPi,
+    name: (r) => r.name,
   });
   const columns: ReportColumn[] = [
     { key: "type", label: "Type" },
@@ -4243,10 +4540,20 @@ function buildNicraStatePivot(model: "nicraTraining" | "nicraExtensionActivity",
       };
     }
     if (scope.kvkId && model === "nicraTraining") {
-      const records = await prisma.nicraTraining.findMany({
+      const rawRecords = await prisma.nicraTraining.findMany({
         where: { kvkId: scope.kvkId },
-        select: { title: true, startDate: true, endDate: true, duration: true, trainingType: true, ...CASTE_SELECT, kvk: { select: { name: true } } },
+        select: { title: true, startDate: true, endDate: true, duration: true, trainingType: true, farmersAttended: true, ...CASTE_SELECT, kvk: { select: { name: true } } },
         orderBy: { startDate: "asc" },
+      });
+      // Real bug fix, 2026-09-14 - always `blocks` (a single per-KVK band).
+      // Field keys match the list's own column keys (page.tsx's NICRA
+      // "training" mapping).
+      const records = applyListFilter(rawRecords, scope, {
+        kvk: (r) => r.kvk.name,
+        title: (r) => r.title,
+        startDate: (r) => r.startDate.toISOString().slice(0, 10),
+        endDate: (r) => r.endDate.toISOString().slice(0, 10),
+        farmersAttended: (r) => String(r.farmersAttended),
       });
       const columns: ReportColumn[] = [
         { key: "title", label: "Title of the training course" },
@@ -4300,7 +4607,7 @@ function buildNicraStatePivot(model: "nicraTraining" | "nicraExtensionActivity",
 
 /** 3.3.C "NICRA Custom Hiring" (super-v2-prod.pdf p.61) - one block per "KVK - State", caste M/F/T beneficiary block then area/hours/revenue/expenditure. */
 async function buildNicraCustomHiring(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraCustomHiringFarmImplement.findMany({
+  const rawRecords = await prisma.nicraCustomHiringFarmImplement.findMany({
     where: scopeAndPeriod(scope, "nicraCustomHiringFarmImplement"),
     select: {
       farmImplementName: true, areaCovered: true, hoursUsed: true, revenueGenerated: true, repairExpenditure: true, ...CASTE_SELECT,
@@ -4308,7 +4615,17 @@ async function buildNicraCustomHiring(scope: ReportScope): Promise<CustomTableRe
     },
     orderBy: { kvk: { name: "asc" } },
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "custom-hiring-farm-implement" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    farmImplementName: (r: R) => r.farmImplementName,
+    areaCovered: (r: R) => String(r.areaCovered),
+    hoursUsed: (r: R) => String(r.hoursUsed),
+    revenueGenerated: (r: R) => String(r.revenueGenerated),
+    repairExpenditure: (r: R) => String(r.repairExpenditure),
+  });
   const columns: ReportColumn[] = [
     { key: "impl", label: "Name of farm implement/equipment" },
     ...casteMftColumns("", { flat: true, grandLabel: "Total" }),
@@ -4344,12 +4661,23 @@ async function buildNicraCustomHiring(scope: ReportScope): Promise<CustomTableRe
 
 /** 3.3.D "NICRA VCRMC" (super-v2-prod.pdf p.61) - per KVK, one row per village. */
 async function buildNicraVcrmc(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraVillageWiseVcrmc.findMany({
+  const rawRecords = await prisma.nicraVillageWiseVcrmc.findMany({
     where: scopeAndPeriod(scope, "nicraVillageWiseVcrmc"),
     include: { kvk: { select: { name: true } } },
     orderBy: { kvk: { name: "asc" } },
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "village-wise-vcrmc" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    villageName: (r: R) => r.villageName,
+    constitutionDate: (r: R) => (r.constitutionDate ? r.constitutionDate.toISOString().slice(0, 10) : ""),
+    members: (r: R) => String(r.members),
+    meetingsOrganized: (r: R) => String(r.meetingsOrganized),
+    meetingDate: (r: R) => (r.meetingDate ? r.meetingDate.toISOString().slice(0, 10) : ""),
+    secretaryName: (r: R) => r.secretaryName ?? "",
+  });
   const M = "VCRMC members (no.)";
   const columns: ReportColumn[] = [
     { key: "village", label: "Village name" },
@@ -4394,12 +4722,26 @@ async function buildNicraVcrmc(scope: ReportScope): Promise<CustomTableResult> {
 
 /** 3.3.E "NICRA Soil Health Card" (super-v2-prod.pdf p.61) - per KVK, samples + caste M/F/T farmer-benefitted block. */
 async function buildNicraSoilHealthCard(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nicraSoilHealthCard.findMany({
+  const rawRecords = await prisma.nicraSoilHealthCard.findMany({
     where: scopeAndPeriod(scope, "nicraSoilHealthCard"),
-    select: { samplesCollected: true, samplesAnalysed: true, shcIssued: true, ...CASTE_SELECT, kvk: { select: { name: true } } },
+    select: {
+      startDate: true, endDate: true, samplesCollected: true, samplesAnalysed: true, shcIssued: true, farmersBenefitted: true,
+      ...CASTE_SELECT, kvk: { select: { name: true } },
+    },
     orderBy: { kvk: { name: "asc" } },
   });
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "soil-health-card" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    startDate: (r: R) => r.startDate.toISOString().slice(0, 10),
+    endDate: (r: R) => r.endDate.toISOString().slice(0, 10),
+    kvk: (r: R) => r.kvk.name,
+    samplesCollected: (r: R) => String(r.samplesCollected),
+    samplesAnalysed: (r: R) => String(r.samplesAnalysed),
+    shcIssued: (r: R) => String(r.shcIssued),
+    farmersBenefitted: (r: R) => String(r.farmersBenefitted),
+  });
   const columns: ReportColumn[] = [
     { key: "collected", label: "No. of soil samples collected" },
     { key: "analysed", label: "No. of samples analysed" },
@@ -4434,12 +4776,20 @@ const CFLD_BUDGET_ITEMS = [
 ] as const;
 
 async function buildCfldBudgetUtilization(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.cfldBudgetUtilization.findMany({
+  const rawRecords = await prisma.cfldBudgetUtilization.findMany({
     where: scopeAndPeriod(scope, "cfldBudgetUtilization"),
     include: { kvk: { select: { name: true } } },
     orderBy: { kvk: { name: "asc" } },
   });
-  type R = (typeof records)[number] & Record<string, unknown>;
+  type R = (typeof rawRecords)[number] & Record<string, unknown>;
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "budget-utilization" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    crop: (r) => r.crop,
+    season: (r) => r.season,
+    overallFundAllocation: (r) => String(r.overallFundAllocation),
+  });
   const columns: ReportColumn[] = [
     { key: "sl", label: "SL." },
     { key: "season", label: "Season" },
@@ -4488,10 +4838,21 @@ function jsonCasteRow(json: unknown): Record<string, string> {
 
 /** 3.5.A "NF Geographical Information" (super-v2-prod.pdf p.64-65) - per KVK. */
 async function buildNfGeographical(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nfGeographicalInfo.findMany({
+  const rawRecords = await prisma.nfGeographicalInfo.findMany({
     where: scopeAndPeriod(scope, "nfGeographicalInfo"),
     include: { kvk: { select: { name: true } } },
     orderBy: [{ kvkId: "asc" }, { startDate: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "nf-geographical" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    startDate: (r) => r.startDate.toISOString().slice(0, 10),
+    endDate: (r) => r.endDate.toISOString().slice(0, 10),
+    agroClimaticZone: (r) => r.agroClimaticZone,
+    farmingSituation: (r) => r.farmingSituation,
+    latitude: (r) => String(r.latitude),
+    longitude: (r) => String(r.longitude),
   });
   const columns: ReportColumn[] = [
     { key: "start", label: "Start date" },
@@ -4542,9 +4903,23 @@ const AGRI_DRONE_PARAMS: { label: string; key: string }[] = [
 /** 3.8.A "Agri-Drone Introduction" (super-v2-prod.pdf p.78-79) - one "Name of parameter / Details of parameter" list per implementing centre. */
 async function buildAgriDroneIntroduction(scope: ReportScope): Promise<CustomTableResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const records: Record<string, any>[] = await prisma.agriDroneIntroduction.findMany({
+  const rawRecords: Record<string, any>[] = await prisma.agriDroneIntroduction.findMany({
     where: scopeAndPeriod(scope, "agriDroneIntroduction"),
+    include: { kvk: { select: { name: true } } },
     orderBy: { year: "asc" },
+  });
+  // Real bug fix, 2026-09-14 - each record becomes its own fixed-parameter
+  // grid (param/detail rows), so even the general client-side blocks fix
+  // can't reach it - no column here is ever named "kvk"/"year"/etc. Field
+  // keys match the list's own column keys (page.tsx's
+  // "agri-drone-introduction" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk?.name ?? "",
+    year: (r) => String(r.year),
+    centreName: (r) => r.centreName ?? "",
+    companyOfDrone: (r) => r.companyOfDrone ?? "",
+    modelOfDrone: (r) => r.modelOfDrone ?? "",
+    dronesSanctioned: (r) => String(r.dronesSanctioned ?? ""),
   });
   const paramCols: ReportColumn[] = [
     { key: "param", label: "Name of parameter" },
@@ -4606,7 +4981,7 @@ const DRMR_ROWS: { band?: string; itemKey?: string; label: string; unit: string 
 ];
 
 async function buildDrmrActivity(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.drmrActivity.findMany({
+  const rawRecords = await prisma.drmrActivity.findMany({
     where: scopeAndPeriod(scope, "drmrActivity"),
     select: {
       startDate: true,
@@ -4614,6 +4989,15 @@ async function buildDrmrActivity(scope: ReportScope): Promise<CustomTableResult>
       items: { select: { itemKey: true, nameSpecification: true, unit: true, quantity: true, farmersByCategory: true } },
     },
     orderBy: [{ kvk: { name: "asc" } }, { startDate: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - blocks, per-activity. Only `kvk`/`startDate`
+  // map to the list's own column keys (page.tsx's "drmr-activity" mapping) -
+  // the rest of the list's columns (endDate/training/flds/...) live on the
+  // activity itself but aren't selected here, since this table's own grid
+  // reads the real, separately-populated `items` child rows instead.
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    startDate: (r) => r.startDate.toISOString().slice(0, 10),
   });
   const singleKvk = !!scope.kvkId;
   const CAPTION =
@@ -4653,7 +5037,7 @@ async function buildDrmrActivity(scope: ReportScope): Promise<CustomTableResult>
 
 /** 3.11.A "CRA Details" (super-v2-prod.pdf p.81) - one block per state ("A. State: Bihar" ...), a serial column, farming-system+crop merged, and the caste participant block from `farmersByCategory`. */
 async function buildCraDetails(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.craDetail.findMany({
+  const rawRecords = await prisma.craDetail.findMany({
     where: scopeAndPeriod(scope, "craDetail"),
     select: {
       season: true, technologyDemonstrated: true, croppingSystem: true, areaHa: true,
@@ -4662,6 +5046,15 @@ async function buildCraDetails(scope: ReportScope): Promise<CustomTableResult> {
       kvk: { select: { name: true, state: { select: { name: true } } } },
     },
     orderBy: [{ kvk: { state: { name: "asc" } } }, { kvk: { name: "asc" } }],
+  });
+  // Real bug fix, 2026-09-14 - blocks, per-KVK/state. Field keys match the
+  // list's own column keys (page.tsx's "cra-details" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    season: (r) => r.season,
+    technologyDemonstrated: (r) => r.technologyDemonstrated,
+    croppingSystem: (r) => r.croppingSystem,
+    areaHa: (r) => String(r.areaHa),
   });
   const columns: ReportColumn[] = [
     { key: "season", label: "Season" },
@@ -4845,17 +5238,26 @@ async function buildCfldTechnicalParameterKvk(kvkId: string): Promise<CustomTabl
  */
 async function buildCfldTechnicalParameter(scope: ReportScope): Promise<CustomTableResult> {
   if (scope.kvkId) return buildCfldTechnicalParameterKvk(scope.kvkId);
-  const records = await prisma.cfldTechnicalParameter.findMany({
+  const rawRecords = await prisma.cfldTechnicalParameter.findMany({
     where: { zoneId: scope.zoneId },
     select: {
       cropType: true, season: true, crop: true,
       areaHa: true, targetAreaHa: true, targetDemonstrations: true,
       yieldFarmerFieldQha: true, yieldDemoAvgQha: true, percentIncrease: true,
-      kvk: { select: { state: { select: { name: true } } } },
+      kvk: { select: { name: true, state: { select: { name: true } } } },
     },
     orderBy: [{ cropType: "asc" }, { season: "asc" }, { crop: "asc" }],
   });
-  type Rec = (typeof records)[number];
+  type Rec = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - a state/season/crop rollup with averaged
+  // yields, but narrowing the raw records that feed it is still correct.
+  // Field keys match the list's own column keys (page.tsx's
+  // "technical-parameter" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: Rec) => r.kvk.name,
+    crop: (r: Rec) => r.crop,
+    areaHa: (r: Rec) => stringifyValue(r.areaHa),
+  });
   const localOf = (r: Rec) => N(r.yieldFarmerFieldQha);
   const demoOf = (r: Rec) => N(r.yieldDemoAvgQha);
   const incOf = (r: Rec) => {
@@ -4943,7 +5345,7 @@ async function buildNicraBasicInfo(scope: ReportScope): Promise<CustomTableResul
   if (scope.kvkId) {
     // kvk-report p.28: one row per record, no State / No. of KVKs - leads with a
     // "Period" (Reporting Date / Start Date / End Date) trio.
-    const records = await prisma.nicraBasicInformation.findMany({
+    const rawRecords = await prisma.nicraBasicInformation.findMany({
       where: { kvkId: scope.kvkId },
       select: {
         reportingDate: true, startDate: true, endDate: true,
@@ -4953,6 +5355,16 @@ async function buildNicraBasicInfo(scope: ReportScope): Promise<CustomTableResul
         kvk: { select: { name: true } },
       },
       orderBy: { startDate: "asc" },
+    });
+    // Real bug fix, 2026-09-14 - the single-KVK view wraps everything in one
+    // `blocks` band. Field keys match the list's own column keys (page.tsx's
+    // "basic-information" mapping).
+    const records = applyListFilter(rawRecords, scope, {
+      kvk: (r) => r.kvk?.name ?? "",
+      rfDistrictNormal: (r) => stringifyValue(r.rfDistrictNormal),
+      rfDistrictReceived: (r) => stringifyValue(r.rfDistrictReceived),
+      maxTemperature: (r) => stringifyValue(r.maxTemperature),
+      minTemperature: (r) => stringifyValue(r.minTemperature),
     });
     const PD = "Period", DD = "Districts data", DS = "Dry spell/ drought", FL = "Flood";
     const columns: ReportColumn[] = [
@@ -5152,7 +5564,7 @@ async function buildNicraDetails(scope: ReportScope): Promise<CustomTableResult>
  * economics columns added in migration batch #3.
  */
 async function buildAryaCurrentYear(scope: ReportScope): Promise<CustomTableResult> {
-  const [records, enterprises, stateNames] = await Promise.all([
+  const [rawRecords, enterprises, stateNames] = await Promise.all([
     prisma.aryaCurrentYearDetail.findMany({
       where: scopeAndPeriod(scope, "aryaCurrentYearDetail"),
       select: {
@@ -5166,6 +5578,16 @@ async function buildAryaCurrentYear(scope: ReportScope): Promise<CustomTableResu
     prisma.masterListItem.findMany({ where: { zoneId: scope.zoneId, type: "ARYA_ENTERPRISE" }, orderBy: { name: "asc" } }),
     reportStates(scope.zoneId),
   ]);
+  // Real bug fix, 2026-09-14 - always `blocks` (per-state/per-KVK, each row
+  // then a per-enterprise sum). Field keys match the list's own column keys
+  // (page.tsx's "arya-safal-current-year" mapping) - narrowing the raw
+  // records before summing correctly narrows the per-enterprise totals too.
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    enterprise: (r) => r.enterprise,
+    viableUnits: (r) => String(r.viableUnits),
+    closedUnits: (r) => String(r.closedUnits),
+  });
   const RY = "No. of rural youth trained", EM = "Employment generated (mandays)";
   const columns: ReportColumn[] = [
     { key: "ent", label: "Name of Enterprise" },
@@ -5223,7 +5645,7 @@ async function buildAryaCurrentYear(scope: ReportScope): Promise<CustomTableResu
  * columns added in migration batch #3.
  */
 async function buildAryaPreviousYear(scope: ReportScope): Promise<CustomTableResult> {
-  const [records, enterprises, stateNames] = await Promise.all([
+  const [rawRecords, enterprises, stateNames] = await Promise.all([
     prisma.aryaPreviousYearEvaluation.findMany({
       where: scopeAndPeriod(scope, "aryaPreviousYearEvaluation"),
       select: {
@@ -5239,6 +5661,17 @@ async function buildAryaPreviousYear(scope: ReportScope): Promise<CustomTableRes
     prisma.masterListItem.findMany({ where: { zoneId: scope.zoneId, type: "ARYA_ENTERPRISE" }, orderBy: { name: "asc" } }),
     reportStates(scope.zoneId),
   ]);
+  // Real bug fix, 2026-09-14 - same class as buildAryaCurrentYear above.
+  // Field keys match the list's own column keys (page.tsx's
+  // "arya-safal-previous-year" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    enterprise: (r) => r.enterprise,
+    totalClosed: (r) => String(r.totalClosed),
+    closingDate: (r) => (r.closingDate ? r.closingDate.toISOString().slice(0, 10) : ""),
+    totalRestarted: (r) => String(r.totalRestarted),
+    restartedDate: (r) => (r.restartedDate ? r.restartedDate.toISOString().slice(0, 10) : ""),
+  });
   const SZ = "Entrepreneurial Unit Size (capacity per year)", CO = "Entrepreneurial Establishment Cost / unit", EM = "Employment generated / year (mandays)";
   // kvk-report p.31 also shows "Date of Closing" / "Date of Restart" next to the
   // closed / restarted counts; super-v2-prod.pdf's 3.4.B has no such columns.
@@ -5320,18 +5753,28 @@ async function buildAryaPreviousYear(scope: ReportScope): Promise<CustomTableRes
  * M/F/T participant block + remark added in migration batch #3).
  */
 async function buildNfPhysical(scope: ReportScope): Promise<CustomTableResult> {
-  const [records, stateNames] = await Promise.all([
+  const [rawRecords, stateNames] = await Promise.all([
     prisma.nfPhysicalInfo.findMany({
       where: scopeAndPeriod(scope, "nfPhysicalInfo"),
       select: {
-        activityName: true, trainingTitle: true, trainingDate: true, venue: true, remarks: true, ...CASTE_SELECT,
+        activityName: true, trainingTitle: true, trainingDate: true, venue: true, remarks: true, participants: true, ...CASTE_SELECT,
         kvk: { select: { name: true, state: { select: { name: true } } } },
       },
       orderBy: [{ kvk: { name: "asc" } }, { trainingDate: "asc" }],
     }),
     reportStates(scope.zoneId),
   ]);
-  type R = (typeof records)[number];
+  type R = (typeof rawRecords)[number];
+  // Real bug fix, 2026-09-14 - always `blocks`. Field keys match the list's
+  // own column keys (page.tsx's "nf-physical" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r: R) => r.kvk.name,
+    activityName: (r: R) => r.activityName,
+    trainingTitle: (r: R) => r.trainingTitle,
+    trainingDate: (r: R) => r.trainingDate.toISOString().slice(0, 10),
+    venue: (r: R) => r.venue,
+    participants: (r: R) => String(r.participants),
+  });
   const kind = (r: R) => {
     const a = (r.activityName || "").toLowerCase();
     if (a.includes("train")) return "Training";
@@ -5406,7 +5849,7 @@ async function buildNfPhysical(scope: ReportScope): Promise<CustomTableResult> {
  * reporting year. Reads the year / engaged-farmer / remark columns added in migration batch #3.
  */
 async function buildNfBeneficiary(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nfBeneficiary.findMany({
+  const rawRecords = await prisma.nfBeneficiary.findMany({
     where: scopeAndPeriod(scope, "nfBeneficiary"),
     select: {
       reportingYear: true, numberOfBlock: true, numberOfVillage: true, numberOfTraining: true,
@@ -5414,6 +5857,15 @@ async function buildNfBeneficiary(scope: ReportScope): Promise<CustomTableResult
       kvk: { select: { name: true } },
     },
     orderBy: { kvk: { name: "asc" } },
+  });
+  // Real bug fix, 2026-09-14 - always `blocks` (per-KVK). Field keys match
+  // the list's own column keys (page.tsx's "nf-beneficiaries" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    numberOfBlock: (r) => String(r.numberOfBlock),
+    numberOfVillage: (r) => String(r.numberOfVillage),
+    numberOfTraining: (r) => String(r.numberOfTraining),
+    farmersInfluenced: (r) => String(r.farmersInfluenced),
   });
   const columns: ReportColumn[] = [
     { key: "year", label: "Reporting year" },
@@ -5451,7 +5903,7 @@ async function buildNfBeneficiary(scope: ReportScope): Promise<CustomTableResult
  * with the before/after pH-EC-OC-N-P-K-Microbes grid (N/P/K/Microbes added in migration batch #3).
  */
 async function buildNfSoilData(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nfSoilData.findMany({
+  const rawRecords = await prisma.nfSoilData.findMany({
     where: scopeAndPeriod(scope, "nfSoilData"),
     select: {
       season: true, type: true, crop: true,
@@ -5459,6 +5911,20 @@ async function buildNfSoilData(scope: ReportScope): Promise<CustomTableResult> {
       afterPh: true, afterEc: true, afterEcOc: true, afterN: true, afterP: true, afterK: true, afterMicrobes: true,
     },
     orderBy: [{ type: "asc" }, { season: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - always `blocks` (per plot type). Field keys
+  // match the list's own column keys (page.tsx's "nf-soil-data" mapping) -
+  // no `kvk` accessor since this model has no kvk field selected here.
+  const records = applyListFilter(rawRecords, scope, {
+    season: (r) => r.season,
+    type: (r) => r.type,
+    crop: (r) => r.crop,
+    beforePh: (r) => stringifyValue(r.beforePh),
+    beforeEc: (r) => stringifyValue(r.beforeEc),
+    beforeEcOc: (r) => stringifyValue(r.beforeEcOc),
+    afterPh: (r) => stringifyValue(r.afterPh),
+    afterEc: (r) => stringifyValue(r.afterEc),
+    afterEcOc: (r) => stringifyValue(r.afterEcOc),
   });
   const B = "Before crop sowing", A = "After harvesting";
   const columns: ReportColumn[] = [
@@ -5550,10 +6016,28 @@ function nfParameterGrid(parameters: unknown): ReportBlockPart {
  * Without/With NF parameter comparison grid from `parameters` JSON.
  */
 async function buildNfDemonstration(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nfDemonstrationInfo.findMany({
+  const rawRecords = await prisma.nfDemonstrationInfo.findMany({
     where: scopeAndPeriod(scope, "nfDemonstrationInfo"),
     include: { kvk: { select: { name: true, state: { select: { name: true } } } } },
     orderBy: [{ kvk: { name: "asc" } }, { createdAt: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - one `pairs` block per farmer (not a grid, so
+  // even the general client-side blocks fix can't reach it - this needs the
+  // server-side narrowing). Field keys match the list's own column keys
+  // (page.tsx's "nf-demonstration" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    farmerName: (r) => r.farmerName,
+    activityName: (r) => r.activityName,
+    crop: (r) => r.crop,
+    variety: (r) => r.variety,
+    farmerAddress: (r) => r.farmerAddress ?? "",
+    farmerContact: (r) => r.farmerContact ?? "",
+    agroClimaticZone: (r) => r.agroClimaticZone ?? "",
+    croppingPattern: (r) => r.croppingPattern ?? "",
+    farmingSituation: (r) => r.farmingSituation ?? "",
+    latitude: (r) => (r.latitude != null ? String(r.latitude) : ""),
+    longitude: (r) => (r.longitude != null ? String(r.longitude) : ""),
   });
   const DEMO_LABELS = [
     "Name of KVK/Farmer where demonstration conducted", "Address of Farmer with contact detail",
@@ -5606,10 +6090,26 @@ async function buildNfDemonstration(scope: ReportScope): Promise<CustomTableResu
  * block: the farmer pairs, then the same Without/With NF parameter comparison grid.
  */
 async function buildNfAlreadyPracticing(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.nfAlreadyPracticing.findMany({
+  const rawRecords = await prisma.nfAlreadyPracticing.findMany({
     where: scopeAndPeriod(scope, "nfAlreadyPracticing"),
     include: { kvk: { select: { name: true } } },
     orderBy: [{ kvk: { name: "asc" } }, { createdAt: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - one `pairs` block per farmer (needs the
+  // server-side narrowing, same as buildNfDemonstration above). Field keys
+  // match the list's own column keys (page.tsx's "nf-already-practicing" mapping).
+  const records = applyListFilter(rawRecords, scope, {
+    kvk: (r) => r.kvk.name,
+    farmerName: (r) => r.farmerName,
+    address: (r) => r.address ?? "",
+    normalCropsGrown: (r) => r.normalCropsGrown ?? "",
+    practicingYear: (r) => String(r.practicingYear),
+    contactNumber: (r) => r.contactNumber ?? "",
+    activityName: (r) => r.activityName ?? "",
+    crop: (r) => r.crop ?? "",
+    technologyDemonstrated: (r) => r.technologyDemonstrated ?? "",
+    areaHa: (r) => (r.areaHa != null ? String(r.areaHa) : ""),
+    farmerFeedback: (r) => r.farmerFeedback ?? "",
   });
   const PRAC_LABELS = [
     "Name of Farmer", "Address", "Contact Number", "Name of Activity", "Crop",
@@ -6001,7 +6501,7 @@ const SUPER_ADMIN_TREE: Sec[] = [
           scope: "direct",
           custom: kvkOwnedTable("staff", [
             { key: "sanctionedPost", label: "Sanctioned post" },
-            { key: "name", label: "Name of the Incumbent" },
+            { key: "name", label: "Name of the Incumbent", listKey: "staffName" },
             { key: "dateOfBirth", label: "Date of Birth" },
             { key: "discipline", label: "Discipline" },
             { key: "payScale", label: "Pay Scale with Present Basic" },
@@ -6023,7 +6523,7 @@ const SUPER_ADMIN_TREE: Sec[] = [
           custom: kvkOwnedTable(
             "infrastructure",
             [
-              { key: "infrastructureName", label: "Infrastructure Name" },
+              { key: "infrastructureName", label: "Infrastructure Name", listKey: "infraMasterName" },
               { key: "notYetStarted", label: "Not Yet Started" },
               { key: "completedPlinthLevel", label: "Completed Plinth Level" },
               { key: "completedLintelLevel", label: "Completed Lintel Level" },
@@ -6060,10 +6560,10 @@ const SUPER_ADMIN_TREE: Sec[] = [
           model: "vehicle",
           scope: "direct",
           custom: kvkOwnedTable("vehicle", [
-            { key: "name", label: "Name of vehicle" },
+            { key: "name", label: "Name of vehicle", listKey: "vehicleName" },
             { key: "registrationNo", label: "Registration No." },
             { key: "yearOfPurchase", label: "Year of purchase" },
-            { key: "cost", label: "Cost (Rs.)" },
+            { key: "cost", label: "Cost (Rs.)", listKey: "totalCost" },
           ]),
         },
         { code: "1.4.B", title: "Vehicle Status", model: "vehicleStatus", scope: "direct", custom: buildVehicleStatus },
@@ -6075,9 +6575,9 @@ const SUPER_ADMIN_TREE: Sec[] = [
           model: "equipment",
           scope: "direct",
           custom: kvkOwnedTable("equipment", [
-            { key: "name", label: "Equipment Name" },
+            { key: "name", label: "Equipment Name", listKey: "equipmentName" },
             { key: "yearOfPurchase", label: "Year of Purchase" },
-            { key: "cost", label: "Cost (Rs.)" },
+            { key: "cost", label: "Cost (Rs.)", listKey: "totalCost" },
           ]),
         },
         { code: "1.5.B", title: "Equipment Status", model: "equipmentStatus", scope: "direct", custom: buildEquipmentStatus },
@@ -6102,7 +6602,14 @@ const SUPER_ADMIN_TREE: Sec[] = [
           title: sector.label,
           groupCode: "2.3.C",
           groupTitle: "Details of Front-Line Demonstration",
-          model: "fldDemonstrationDetail",
+          // Real bug fix, 2026-09-14 - was "fldDemonstrationDetail" (the
+          // schema table this table's builder used to read, always empty).
+          // Now that buildFldDetailsSubTable reads Fld directly, tagging it
+          // "fld" too means a View FLD download's own leafModel narrowing
+          // (LEAF_MODEL_MAP: "fld") actually includes this table, instead of
+          // silently dropping it alongside FLD Summary/State-wise's own
+          // real fix.
+          model: "fld",
           scope: "direct" as const,
           custom: buildFldDetailsSubTable(sector.key),
         })),
@@ -6185,7 +6692,7 @@ const KVK_TREE: Sec[] = [
       { num: "1.2", title: "Employee Information", items: [
         { code: "1.2.A", title: "All KVK Staff", model: "staff", scope: "direct", custom: kvkOwnedTable("staff", [
           { key: "sanctionedPost", label: "Sanctioned post" },
-          { key: "name", label: "Name of the Incumbent" },
+          { key: "name", label: "Name of the Incumbent", listKey: "staffName" },
           { key: "dateOfBirth", label: "Date of Birth" },
           { key: "discipline", label: "Discipline" },
           { key: "payScale", label: "Pay Scale with Present Basic" },
@@ -6199,7 +6706,7 @@ const KVK_TREE: Sec[] = [
       ]},
       { num: "1.3", title: "Infrastructure Information", items: [
         { code: "1.3.A", title: "Infrastructure Details", model: "infrastructure", scope: "direct", custom: kvkOwnedTable("infrastructure", [
-          { key: "infrastructureName", label: "Name of Infrastructure" },
+          { key: "infrastructureName", label: "Name of Infrastructure", listKey: "infraMasterName" },
           { key: "underUse", label: "Under use or not" },
           { key: "sourceOfFunding", label: "Source of Funding" },
           { key: "fundingAgencyName", label: "Funding Agency Name" },
@@ -6220,19 +6727,19 @@ const KVK_TREE: Sec[] = [
       { num: "1.4", title: "Vehicles Information", items: [
         { code: "1.4.A", title: "Vehicles Details", model: "vehicle", scope: "direct", custom: kvkOwnedTable("vehicle", [
           { key: "vehicleType", label: "Vehicle Type" },
-          { key: "name", label: "Name of vehicle" },
+          { key: "name", label: "Name of vehicle", listKey: "vehicleName" },
           { key: "registrationNo", label: "Registration No." },
           { key: "yearOfPurchase", label: "Year of purchase" },
-          { key: "cost", label: "Cost (Rs.)" },
+          { key: "cost", label: "Cost (Rs.)", listKey: "totalCost" },
         ]) },
         { code: "1.4.B", title: "Vehicle Status", model: "vehicleStatus", scope: "direct", custom: buildVehicleStatus },
       ]},
       { num: "1.5", title: "Equipments Information", items: [
         { code: "1.5.A", title: "Equipments Details", model: "equipment", scope: "direct", custom: kvkOwnedTable("equipment", [
           { key: "equipmentType", label: "Equipment Type" },
-          { key: "name", label: "Equipment Name" },
+          { key: "name", label: "Equipment Name", listKey: "equipmentName" },
           { key: "yearOfPurchase", label: "Year of Purchase" },
-          { key: "cost", label: "Cost (Rs.)" },
+          { key: "cost", label: "Cost (Rs.)", listKey: "totalCost" },
         ]) },
         { code: "1.5.B", title: "Equipment Status", model: "equipmentStatus", scope: "direct", custom: buildEquipmentStatus },
       ]},
@@ -6258,7 +6765,9 @@ const KVK_TREE: Sec[] = [
           title: sector.label,
           groupCode: "2.3.B",
           groupTitle: "Details of Front-Line Demonstration",
-          model: "fldDemonstrationDetail",
+          // Real bug fix, 2026-09-14 - see the matching comment on the
+          // Super Admin tree's own 2.3.C.n entries above.
+          model: "fld",
           scope: "direct" as const,
           custom: buildFldDetailsSubTable(sector.key),
         })),

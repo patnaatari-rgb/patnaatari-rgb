@@ -18,6 +18,20 @@
  * multi-select (client request, 2026-09-07). When set it takes precedence
  * over `fromDate`/`toDate` and scopes to exactly those calendar years -
  * which need not be contiguous (2026 + 2024 but not 2025).
+ *
+ * `listFilter` carries a Form Management list's own live search box + per-
+ * column value checklist down into a `blocks`-shaped builder (real bug,
+ * 2026-09-14: `scopeReportSectionsToFilters` in empty-data-table.tsx can only
+ * narrow a plain columns+rows grid after the fact - it explicitly leaves any
+ * `blocks` table untouched, since a block is already a computed grouping,
+ * not raw filterable rows. A leaf whose report is built entirely from blocks
+ * (Trainings, Extension Activities, Poshan Maaha, Publications, HRD,
+ * Production & Supply, Staff Quarters, OFT's per-trial detail table, World
+ * Soil Day's zone-level view) downloaded every record regardless of what was
+ * filtered on screen, with no visible sign it had been ignored - client
+ * report, 2026-09-14: "select single [record], download, sab data aa gaya").
+ * Each affected builder applies this itself, on its own fetched records,
+ * before grouping into blocks - see `applyListFilter` below.
  */
 export type ReportScope = {
   kvkId?: string;
@@ -25,7 +39,47 @@ export type ReportScope = {
   fromDate?: string;
   toDate?: string;
   years?: number[];
+  listFilter?: {
+    /** Case-insensitive substring match, same as the list's own search box. */
+    search?: string;
+    /** Column key -> the set of values still checked in that column's filter checklist (an omitted key means that column has no active filter). */
+    columnValues?: Record<string, string[]>;
+  };
 };
+
+/**
+ * Narrows a `blocks`-builder's own fetched records by `scope.listFilter`,
+ * mirroring empty-data-table.tsx's `filteredRows` semantics exactly (search
+ * across the given fields, column values matched by their mapped field) so a
+ * blocks-based download shows the same rows the list's own filtered table
+ * does. `fieldAccessors` maps a list column key to a string reader for this
+ * builder's own record shape - a key with no accessor is silently ignored
+ * (never used to wrongly empty the whole result) since not every list column
+ * has a same-named field on every builder's fetched record.
+ */
+export function applyListFilter<T>(
+  records: T[],
+  scope: ReportScope,
+  fieldAccessors: Record<string, (r: T) => string>,
+): T[] {
+  const lf = scope.listFilter;
+  if (!lf) return records;
+  let out = records;
+  if (lf.search?.trim()) {
+    const q = lf.search.trim().toLowerCase();
+    const getters = Object.values(fieldAccessors);
+    out = out.filter((r) => getters.some((get) => get(r).toLowerCase().includes(q)));
+  }
+  if (lf.columnValues) {
+    for (const [key, allowed] of Object.entries(lf.columnValues)) {
+      const get = fieldAccessors[key];
+      if (!get || allowed.length === 0) continue;
+      const allowedSet = new Set(allowed);
+      out = out.filter((r) => allowedSet.has(get(r)));
+    }
+  }
+  return out;
+}
 
 /** Human label for a reporting period - "2026" / "2024, 2026" / "2024 - 2026" / "All Data". */
 export function reportPeriodLabel(fromDate?: string, toDate?: string, years?: number[]): string {
@@ -51,7 +105,19 @@ export type ReportCell = Record<string, string>;
  * `label: "M"` for a 4-row header, while "Telephone" over "Office"/"FAX" is
  * just `groups: ["Telephone"]`.
  */
-export type ReportColumn = { key: string; label: string; groups?: string[] };
+/**
+ * `listKey` names the corresponding Form Management list column's own `key`,
+ * only when it differs from this column's own `key` - purely so a download's
+ * filter-narrowing (empty-data-table.tsx's `scopeReportSectionsToFilters`)
+ * can still match an active column filter by key when the list and the
+ * report happened to name the same field differently (real bug, 2026-09-14:
+ * Employee Details' own "Staff Name" list column is `staffName`, but the "All
+ * KVK Staff" report column reads the same Prisma field as `name` - neither
+ * the key nor the label lined up, even after normalising, so filtering to
+ * one staff member and downloading still dumped every staff member). Never
+ * used for rendering - only `key`/`label` reach the header/rows.
+ */
+export type ReportColumn = { key: string; label: string; groups?: string[]; listKey?: string };
 
 export type HeaderCell = { text: string; colSpan: number; rowSpan: number };
 

@@ -48,6 +48,28 @@ export async function GET(request: Request) {
     ),
   ).sort((a, b) => a - b);
   const yearsArg = years.length > 0 ? years : undefined;
+  /**
+   * The list's own search box + per-column value checklist (real bug fix,
+   * 2026-09-14: only reaches the few `blocks`-shaped builders that opt into
+   * reading it via `applyListFilter` - every other builder is already
+   * narrowed client-side by scopeReportSectionsToFilters, so passing this
+   * along for them too is harmless, just unused).
+   */
+  const searchArg = url.searchParams.get("search")?.trim() || undefined;
+  const colfRaw = url.searchParams.get("colf");
+  let columnValuesArg: Record<string, string[]> | undefined;
+  if (colfRaw) {
+    try {
+      const parsed = JSON.parse(colfRaw);
+      if (parsed && typeof parsed === "object") columnValuesArg = parsed;
+    } catch {
+      // Malformed/tampered param - ignore rather than fail the whole download.
+    }
+  }
+  const listFilterArg =
+    searchArg || (columnValuesArg && Object.keys(columnValuesArg).length > 0)
+      ? { search: searchArg, columnValues: columnValuesArg }
+      : undefined;
   const isKvkScoped = auth.session.role !== "SUPER_ADMIN";
 
   let kvkId: string | undefined = isKvkScoped ? auth.session.kvkId ?? undefined : undefined;
@@ -74,6 +96,7 @@ export async function GET(request: Request) {
     fromDate,
     toDate,
     years: yearsArg,
+    listFilter: listFilterArg,
   });
 
   let matched: boolean | undefined;
