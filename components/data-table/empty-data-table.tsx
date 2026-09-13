@@ -153,6 +153,17 @@ type EmptyDataTableProps = {
   readOnly?: boolean;
   /** Employee Details only: the Action dropdown gains "Transfer", opening a KVK + Date of Relieving dialog that POSTs to /api/staff/transfer. The hop then shows under the destination KVK's "Details of Staff Transferred" list only. */
   staffTransfer?: boolean;
+  /**
+   * Employee Details only (client direction, 2026-09-13): a staff transfer
+   * saves instantly, but a tab already sitting open on the DESTINATION KVK's
+   * Employee Details - opened before the transfer happened - has no way to
+   * know new data exists, since this app has no push/WebSocket layer. Polls
+   * `router.refresh()` every 30s so that tab picks up an incoming transfer
+   * on its own, without the KVK Admin needing to know to hit reload. Paused
+   * while the tab isn't visible, so it isn't refreshing (and re-querying the
+   * database) for a tab nobody is looking at.
+   */
+  autoRefresh?: boolean;
   /** Registry key in lib/leaf-record-registry.ts (Form Management) or lib/masters-registry.ts (All Masters) - enables real Edit/Delete for this leaf's rows. Omit for leaves not wired to the database yet. For recordKind "notification" this is just a truthy sentinel (the row's own `id` drives the real /api/notifications/[id] URL, not a registry path). */
   recordPath?: string;
   /** Which registry/endpoint `recordPath` refers to - "form" (default, KVK-scoped Form Management leaves), "master" (zone-scoped, Super Admin only, All Masters leaves), or "notification" (Notifications page's Sent/Received tables, /api/notifications/[id]). */
@@ -235,9 +246,19 @@ export function EmptyDataTable({
   onMutated,
   staffTransferHistory,
   staffTransfer,
+  autoRefresh,
   readOnly,
 }: EmptyDataTableProps) {
   const router = useRouter();
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => {
+      if (!document.hidden) router.refresh();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [autoRefresh, router]);
+
   /** Every list table gets a real Action column (Edit/Delete) regardless of role, matching every other leaf in the app - Transfer/Add Result specifically stay KVK-only below (transferring or marking a trial's own result isn't a Super Admin action), but that no longer means hiding Edit/Delete from Super Admin too. `readOnly` leaves (Staff Transferred) are the one exception the live reference makes - a plain table, no row actions. */
   const showActionColumn = !readOnly;
   /** `columns` includes any `formOnly` entries (demographic-breakdown blocks) needed by the Add/Edit form below - the list table itself only ever renders real, single-value columns, so every table concern (header, rows, colSpan, exports) uses this filtered list instead. */

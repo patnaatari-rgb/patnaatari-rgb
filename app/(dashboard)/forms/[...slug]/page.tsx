@@ -734,25 +734,6 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       ],
       totalCount: statuses.length + carried.length,
     };
-  } else if (user && node.type === "leaf" && node.slug === "farm-implement-details") {
-    const rows = await prisma.farmImplement.findMany({
-      where: kvkScope,
-      include: { kvk: true },
-      // Same real bug as view-vehicles/view-equipments above (2026-09-13).
-      orderBy: [{ yearOfPurchase: "desc" }, { createdAt: "desc" }],
-    });
-    formData = {
-      rows: rows.map((r) => ({
-        id: r.id,
-        kvk: r.kvk.name,
-        name: r.name,
-        yearOfPurchase: r.yearOfPurchase != null ? String(r.yearOfPurchase) : "",
-        totalCost: r.totalCost != null ? String(r.totalCost) : "",
-        presentStatus: r.presentStatus ?? "",
-        sourceOfFund: r.sourceOfFund ?? "",
-      })),
-      totalCount: rows.length,
-    };
   } else if (user && node.type === "leaf" && node.slug === "oft") {
     const rows = await prisma.oft.findMany({
       where: kvkScope,
@@ -2840,6 +2821,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           resultKind={node.slug === "view-fld" ? "fld" : node.slug === "oft" ? "oft" : undefined}
           staffTransferHistory={node.slug === "staff-transferred"}
           staffTransfer={node.slug === "employee-details"}
+          autoRefresh={node.slug === "employee-details"}
           /* atariams.org /transfer-staff is a plain read-only table (no Add, no Action) - the records come only from Employee Details' Transfer action. */
           readOnly={node.slug === "staff-transferred"}
           /** Exact wording from the client's "changes required 1.0.pdf" (2026-08-25, item 4) - each leaf's own note only, no cross-reference to the other leaf. CFLD Technical Parameter's own note is exact text confirmed against the real reference (atari-client.vercel.app, 2026-09-02). */

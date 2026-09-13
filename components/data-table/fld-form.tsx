@@ -389,9 +389,10 @@ export function FldForm({ trail, backHref, id, initialView }: FldFormProps) {
 
         <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">
           <OtherAwareSelect id="fld-sector" label="Sector" required value={sector} onChange={setSector} rows={sectorRows} optionKey="sectorName" />
-          <OtherAwareSelect id="fld-thematic-area" label="Thematic Area" required value={thematicArea} onChange={setThematicArea} rows={thematicAreaRowsFiltered} allRows={thematicAreaRows} optionKey="thematicAreaName" />
           <OtherAwareSelect id="fld-category" label="Category" required value={category} onChange={setCategory} rows={categoryRowsFiltered} allRows={categoryRows} optionKey="categoryName" />
           <OtherAwareSelect id="fld-sub-category" label="Sub Category" required value={subCategory} onChange={setSubCategory} rows={subCategoryRowsFiltered} allRows={subCategoryRows} optionKey="subCategoryName" />
+          {/* Client direction, 2026-09-13: Sector -> Category -> Sub Category -> Thematic Area order (was Sector -> Thematic Area -> Category -> Sub Category) - display order only, Thematic Area's own filter still just keys off Sector (see thematicAreaRowsFiltered above), unaffected by this move. */}
+          <OtherAwareSelect id="fld-thematic-area" label="Thematic Area" required value={thematicArea} onChange={setThematicArea} rows={thematicAreaRowsFiltered} allRows={thematicAreaRows} optionKey="thematicAreaName" />
         </div>
 
         <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">

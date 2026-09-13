@@ -967,29 +967,23 @@ const aboutKvk = group(
        */
       leaf("infrastructure-details", "Infrastructure Details", [
         { key: "kvk", label: "KVK" },
+        /**
+         * Client direction, 2026-09-13: picking "Others" here didn't open a
+         * free-text box the way every other "Other" in this app does (OFT/
+         * FLD's sector/crop selects, Equipment Type, ...) - it was a plain
+         * hardcoded `staticOptions` list with no Other-handling at all, even
+         * though a real Infrastructure Master (type "infrastructure") already
+         * existed with the identical 15 values, "Other" already flagged
+         * `isOther`. Switched to that real master via `sourceMaster` instead
+         * of a second hardcoded copy - reuses the same free-text mechanism
+         * every other sourceMaster field already has, no new logic needed.
+         */
         {
           key: "infraMasterName",
           label: "Name of Infrastructure",
           required: true,
           formOrder: 1,
-          placeholder: "Please Select",
-          staticOptions: [
-            "Admin Building",
-            "Farmers Hostel",
-            "Staff Quarters",
-            "Piggery unit",
-            "Fencing",
-            "Rain Water harvesting structure",
-            "Threshing floor",
-            "Farm godown",
-            "Dairy unit",
-            "Poultry unit",
-            "Goatery unit",
-            "Mushroom Lab",
-            "Shade house",
-            "Soil test Lab",
-            "Others",
-          ],
+          sourceMaster: { master: "infrastructure", optionKey: "name" },
         },
         { key: "notYetStarted", label: "Not Yet Started", staticOptions: ["Yes", "No"], placeholder: "Please Select", required: true, formOrder: 5 },
         { key: "completedPlinthLevel", label: "Completed upto plinth level", staticOptions: ["Yes", "No"], placeholder: "Please Select", required: true, formOrder: 2 },
@@ -1232,20 +1226,14 @@ const aboutKvk = group(
         },
       ]),
       /**
-       * Standalone About-KVK leaf on atariams.org (/view-implement +
-       * /create-implement, KVK admin). The list header for the name column
-       * is "Equipment Name"; the Add/Edit form labels the same field "Name
-       * of Implement". Present Status and Source of fund are plain text on
-       * the reference form (no fixed option list). No photo upload.
+       * Removed (client direction, 2026-09-13 - "sir ne kaha hai" the whole
+       * form isn't needed) - was a standalone About-KVK leaf matching the
+       * live reference (atariams.org /view-implement). The Prisma model
+       * (`FarmImplement`) and any real rows a KVK already entered are left
+       * as-is (not dropped/deleted) - only the app's own UI/routing/report
+       * wiring to it is removed here, matching how this app always treats a
+       * "remove this feature" request separately from "delete this data".
        */
-      leaf("farm-implement-details", "Farm Implement Details", [
-        { key: "kvk", label: "KVK", readonly: true },
-        { key: "name", label: "Equipment Name", formLabel: "Name of Implement", required: true },
-        { key: "yearOfPurchase", label: "Year of Purchase", required: true },
-        { key: "totalCost", label: "Total Cost (Rs.)", formLabel: "Total Cost", required: true },
-        { key: "presentStatus", label: "Present Status", required: true },
-        { key: "sourceOfFund", label: "Source of Funding", required: true },
-      ]),
     ]),
   ],
   {
@@ -1328,7 +1316,8 @@ const achievements = group("achievements", "Achievements", [
       "Extension & Training activities under FLD",
       [
         // Not individually re-confirmed against a live reference screenshot (client direction, 2026-09-03: apply the same "every field required except Remark/Funding Agency Name-style notes" pattern every other Achievements leaf has shown) - `remark` stays optional to match that same established precedent (OFT's own Remark field, Training's own Funding Agency Name).
-        { key: "fldName", label: "FLD Name", required: true },
+        /** Client direction, 2026-09-13: pick from this KVK's own real FLD names (Fld.technologyDemonstrated, via /api/fld-options) instead of free text - was letting a re-typed name drift from the actual FLD record it's meant to track. Placeholder pinned to "Select FLD" (client direction, same day) rather than the auto-generated "Select FLD Name" - matches Technical Feedback on FLD's own "FLD" field wording exactly. */
+        { key: "fldName", label: "FLD Name", required: true, placeholder: "Select FLD", sourceMaster: { master: "__fld__", optionKey: "name" } },
         { key: "activity", label: "Activity", required: true },
         { key: "date", label: "Date", required: true },
         { key: "activityCount", label: "No. of Activity", required: true },
@@ -1342,7 +1331,8 @@ const achievements = group("achievements", "Achievements", [
       "Technical Feedback on FLD",
       [
         // Same pattern applied here as fld-extension-training above.
-        { key: "fld", label: "FLD", required: true },
+        { key: "fld", label: "FLD", required: true, sourceMaster: { master: "__fld__", optionKey: "name" } },
+        /** Client direction, 2026-09-13: tried a Crop Master dropdown here, reverted same day - stays plain free text. */
         { key: "crop", label: "Crop", required: true },
         { key: "feedback", label: "Feedback", required: true },
       ],

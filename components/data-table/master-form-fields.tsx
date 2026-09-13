@@ -98,17 +98,22 @@ const sourceMasterCache = new Map<string, Promise<Record<string, string>[]>>();
 
 /**
  * Sentinel `sourceMaster.master` values that resolve to one KVK's own records
- * (its Staff / Vehicles / Equipments), not a real zone-wide master slug -
- * these belong to a single KVK, unlike every other cross-master dropdown, so
- * each has its own `/api/*-options` endpoint instead of a `/api/master-options`
- * slug. The reference's own "Vehicle" / "Equipment" selects on the yearly
- * Vehicle/Equipment Details forms pull the same per-KVK list.
+ * (its Staff / Vehicles / Equipments / FLDs), not a real zone-wide master
+ * slug - these belong to a single KVK, unlike every other cross-master
+ * dropdown, so each has its own `/api/*-options` endpoint instead of a
+ * `/api/master-options` slug. The reference's own "Vehicle" / "Equipment"
+ * selects on the yearly Vehicle/Equipment Details forms pull the same
+ * per-KVK list; `__fld__` is the same idea for the "FLD Name"/"FLD" fields
+ * on Extension & Training activities under FLD and Technical Feedback on
+ * FLD, added 2026-09-13 so both pick from real FLD records instead of free
+ * text.
  */
 const STAFF_SOURCE = "__staff__";
 const PER_KVK_OPTION_ENDPOINTS: Record<string, string> = {
   [STAFF_SOURCE]: "/api/staff-options",
   __vehicle__: "/api/vehicle-options",
   __equipment__: "/api/equipment-options",
+  __fld__: "/api/fld-options",
 };
 
 function fetchRows(url: string): Promise<Record<string, string>[]> {

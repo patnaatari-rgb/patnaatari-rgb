@@ -394,18 +394,6 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
       update: data,
     });
   },
-  "about-kvk/equipments/farm-implement-details": (v, ctx) =>
-    prisma.farmImplement.create({
-      data: {
-        ...ctx,
-        name: reqStr(v.name),
-        yearOfPurchase: int(v.yearOfPurchase),
-        totalCost: dec(v.totalCost),
-        presentStatus: str(v.presentStatus),
-        sourceOfFund: str(v.sourceOfFund),
-      },
-    }),
-
   "about-kvk/employee/employee-details": (v, ctx) =>
     prisma.staff.create({
       data: {
@@ -1532,7 +1520,6 @@ export const LEAF_DELETE_REGISTRY: Record<string, DeleteFn> = {
   "about-kvk/vehicles/vehicle-details": (id, ctx) => prisma.vehicleStatus.deleteMany({ where: { id, vehicle: { ...kvkScope(ctx) } } }),
   "about-kvk/equipments/view-equipments": (id, ctx) => prisma.equipment.deleteMany({ where: { id, ...kvkScope(ctx) } }),
   "about-kvk/equipments/equipment-details": (id, ctx) => prisma.equipmentStatus.deleteMany({ where: { id, equipment: { ...kvkScope(ctx) } } }),
-  "about-kvk/equipments/farm-implement-details": (id, ctx) => prisma.farmImplement.deleteMany({ where: { id, ...kvkScope(ctx) } }),
   "about-kvk/employee/employee-details": async (id, ctx) => {
     // Staff -> StaffTransfer is a RESTRICT FK, so a staff member who has ever
     // been transferred can't be deleted directly (the transfer flow now
@@ -1817,17 +1804,6 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
         reportingYear: reqInt(v.reportingYear),
         presentStatus: str(v.presentStatus),
         repairingCost: v.presentStatus === "Repairing" ? dec(v.repairingCost) : null,
-      },
-    }),
-  "about-kvk/equipments/farm-implement-details": (id, v, ctx) =>
-    prisma.farmImplement.updateMany({
-      where: { id, ...kvkScope(ctx) },
-      data: {
-        name: reqStr(v.name),
-        yearOfPurchase: int(v.yearOfPurchase),
-        totalCost: dec(v.totalCost),
-        presentStatus: str(v.presentStatus),
-        sourceOfFund: str(v.sourceOfFund),
       },
     }),
   "about-kvk/employee/staff-transferred": (id, v, ctx) =>
