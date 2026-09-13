@@ -45,18 +45,16 @@ export function Topbar() {
     typeof window === "undefined" ? 0 : readSeen(),
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadNotifications = useCallback(() => {
     fetch("/api/notifications")
       .then((r) => (r.ok ? r.json() : { received: [] }))
-      .then((data: { received?: NotifItem[] }) => {
-        if (!cancelled) setReceived(data.received ?? []);
-      })
+      .then((data: { received?: NotifItem[] }) => setReceived(data.received ?? []))
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const unreadCount = received.filter((n) => new Date(n.createdAt).getTime() > lastSeen).length;
 
@@ -119,7 +117,23 @@ export function Topbar() {
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-5">
-        <DropdownMenu onOpenChange={(open) => { if (open && unreadCount > 0) markSeen(); }}>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            /**
+             * Real bug fix, 2026-09-14 - `received` was only ever fetched
+             * once, on the very first mount of this shell (client report:
+             * deleted a notification on the /notifications page, but the
+             * bell up top kept showing it). This shell stays mounted across
+             * client-side navigation, so opening the bell is the one
+             * reliable moment to catch anything deleted/added elsewhere -
+             * refetch every time it opens, not just once ever.
+             */
+            if (open) {
+              loadNotifications();
+              if (unreadCount > 0) markSeen();
+            }
+          }}
+        >
           <DropdownMenuTrigger
             render={
               <button

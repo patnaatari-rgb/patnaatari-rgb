@@ -212,7 +212,9 @@ function LoginForm() {
               Download User Manual
             </a>
             <a
-              href="#"
+              href="https://docs.google.com/forms/d/e/1FAIpQLScEHp9RiLffqgAZwKKGh63faAzR9wbRooasr1UcQDf77xdpKw/viewform?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
               className="block font-semibold text-destructive underline underline-offset-2"
             >
               Feedback / Help &amp; Support: Google Form

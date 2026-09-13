@@ -152,6 +152,11 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   "achievements/special-days/poshan-maaha": { model: "poshanMaaha" },
   "achievements/production-supply": { model: "technologyProductProduction" },
   "achievements/soil-water/soil-water-testing": { model: "soilWaterPlantAnalysis" },
+  // Real bug fix, 2026-09-14 - genuinely missing: 485 real records already
+  // existed with nowhere to show up in Form Summary. MODEL_YEAR_FIELD above
+  // already had this model's yearField prepared (reportingYear/int) - only
+  // this leaf-to-model entry itself was missing.
+  "achievements/soil-water/soil-testing-equipment": { model: "soilTestingEquipment" },
   "achievements/special-days/world-soil-day": { model: "worldSoilDay" },
   "achievements/publications": { model: "publication" },
   "achievements/hrd": { model: "humanResourceDevelopment" },
@@ -205,6 +210,17 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   "performance/impact/entrepreneurship-details": { model: "entrepreneurshipDetail" },
   "performance/impact/success-stories": { model: "successStory" },
   "performance/district-village-performance/district-level-data": { model: "districtLevelData" },
+  // Real bug fix, 2026-09-14 - these 3 sibling leaves (all real, already
+  // wired into the government report - lib/report-data.ts) were never added
+  // here, so Form Summary silently never counted them: 7 real Productivity
+  // rows and 2 real Livestock rows were already invisible before this fix.
+  // None of the 3 models carries a reporting-year column (confirmed against
+  // schema.prisma), so - same as the roster tables noted above - no
+  // yearField entry belongs here either; they count all-time in every
+  // year's view, same as bank/land/staff already do.
+  "performance/district-village-performance/district-crop-productivity": { model: "districtCropProductivity" },
+  "performance/district-village-performance/district-monthly-weather": { model: "districtMonthlyWeather" },
+  "performance/district-village-performance/district-livestock-production": { model: "districtLivestockProduction" },
   "performance/district-village-performance/operational-area-details": { model: "operationalAreaDetail" },
   "performance/district-village-performance/village-adoption-programme": { model: "villageAdoptionProgramme" },
   "performance/district-village-performance/priority-thrust-area": { model: "priorityThrustArea" },
