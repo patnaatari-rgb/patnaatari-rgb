@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const scopeParam = url.searchParams.get("scope");
   const needs = (key: "oft" | "fld" | "training" | "extension") => !scopeParam || scopeParam === key;
 
-  const isKvkAdmin = auth.session.role === "KVK_ADMIN";
+  const isKvkAdmin = auth.session.role !== "SUPER_ADMIN";
   const kvkId = isKvkAdmin ? auth.session.kvkId ?? undefined : undefined;
 
   /**

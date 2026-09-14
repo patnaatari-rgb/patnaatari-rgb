@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   let kvkId: string | undefined;
   let kvkIds: string[] | undefined;
-  if (auth.session.role === "KVK_ADMIN" && auth.session.kvkId) {
+  if (auth.session.role !== "SUPER_ADMIN" && auth.session.kvkId) {
     kvkId = auth.session.kvkId;
   } else if (kvkNameFilters.length === 1) {
     const kvk = await prisma.kvk.findFirst({

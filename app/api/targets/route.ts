@@ -28,7 +28,7 @@ export async function GET() {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
-  const kvkId = auth.session.role === "KVK_ADMIN" ? auth.session.kvkId ?? undefined : undefined;
+  const kvkId = auth.session.role !== "SUPER_ADMIN" ? auth.session.kvkId ?? undefined : undefined;
   const targets = await prisma.target.findMany({
     where: kvkId ? { kvkId } : { zoneId: auth.session.zoneId },
     include: { kvk: { select: { name: true } } },
@@ -135,7 +135,7 @@ export async function DELETE(request: Request) {
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing target id." }, { status: 400 });
 
-  const kvkId = auth.session.role === "KVK_ADMIN" ? auth.session.kvkId ?? undefined : undefined;
+  const kvkId = auth.session.role !== "SUPER_ADMIN" ? auth.session.kvkId ?? undefined : undefined;
   const result = await prisma.target.deleteMany({
     where: { id, ...(kvkId ? { kvkId } : { zoneId: auth.session.zoneId }) },
   });

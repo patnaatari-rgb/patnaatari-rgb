@@ -15,7 +15,7 @@ export async function GET() {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
-  const isKvkAdmin = auth.session.role === "KVK_ADMIN";
+  const isKvkAdmin = auth.session.role !== "SUPER_ADMIN";
   const where =
     isKvkAdmin && auth.session.kvkId
       ? { kvkId: auth.session.kvkId }

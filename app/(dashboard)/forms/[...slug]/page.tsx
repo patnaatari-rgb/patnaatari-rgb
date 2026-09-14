@@ -379,7 +379,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
    */
   let formData: { rows: Record<string, string>[]; totalCount: number } | undefined;
   const user = node.type === "leaf" ? await getCurrentUser() : null;
-  const scopedKvkId = user?.role === "KVK_ADMIN" ? (user.kvkId ?? undefined) : undefined;
+  const scopedKvkId = user && user.role !== "SUPER_ADMIN" ? (user.kvkId ?? undefined) : undefined;
   const kvkScope: { kvkId?: string; zoneId?: string } = scopedKvkId
     ? { kvkId: scopedKvkId }
     : { zoneId: user?.zoneId };
@@ -387,7 +387,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
   if (user && node.type === "leaf" && node.slug === "view-kvks") {
     const kvks = await prisma.kvk.findMany({
       where:
-        user.role === "KVK_ADMIN" && user.kvkId
+        user.role !== "SUPER_ADMIN" && user.kvkId
           ? { id: user.kvkId }
           : { zoneId: user.zoneId },
       include: { state: true, district: true, hostOrg: true, zone: true, institute: true },
