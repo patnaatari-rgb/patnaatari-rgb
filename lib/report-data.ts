@@ -559,13 +559,31 @@ async function buildOftTechnologySummary(scope: ReportScope): Promise<CustomTabl
         discipline: true,
         noOfTrialReplicationFarmer: true,
         kvkId: true,
-        kvk: { select: { state: { select: { name: true } } } },
+        kvk: { select: { name: true, state: { select: { name: true } } } },
+        reportingYear: true,
+        staff: true,
+        trialOnForm: true,
+        problemDiagnosed: true,
+        status: true,
       },
     }),
     prisma.state.findMany({ where: { zoneId: scope.zoneId }, orderBy: { name: "asc" } }),
   ]);
 
   const stateNames = states.map((s) => s.name);
+  // Real bug fix, 2026-09-14 - this state x thematic-area matrix is one of
+  // 3 tables the OFT list's own download narrows to (2.2.A/B/C, all tagged
+  // model:"oft"), but only 2.2.C (KVK Wise Details) pre-filtered its raw
+  // records - selecting one OFT and downloading still showed this summary
+  // matrix built from every OFT record. Same field keys as buildOftKvkWiseDetails.
+  const filteredOftRows = applyListFilter(oftRows, scope, {
+    kvk: (r) => r.kvk?.name ?? "",
+    reportingYear: (r) => String(r.reportingYear),
+    staff: (r) => r.staff,
+    trialOnForm: (r) => r.trialOnForm,
+    problemDiagnosed: (r) => r.problemDiagnosed ?? "",
+    status: (r) => (r.status === "COMPLETED" ? "Completed" : r.status === "TRANSFERRED" ? "Transferred to Next Year" : "Ongoing"),
+  });
   type Row = (typeof oftRows)[number];
 
   /** "No. of technologies assessed" = count of OFT records; "Locations" = distinct KVKs; "Trial/Replications" = sum of noOfTrialReplicationFarmer (the reference never defines these - flagged). */
@@ -626,7 +644,7 @@ async function buildOftTechnologySummary(scope: ReportScope): Promise<CustomTabl
     matrixRows.push({ sector: `${letter}) ${title}` });
     const subTotal: Record<string, number> = {};
     for (const area of subject?.thematicAreas ?? []) {
-      const row = { sector: thematicLabel(area.name), ...keysFor(oftRows.filter((r) => r.thematicArea === area.name)) };
+      const row = { sector: thematicLabel(area.name), ...keysFor(filteredOftRows.filter((r) => r.thematicArea === area.name)) };
       matrixRows.push(row);
       addInto(subTotal, row);
       addInto(grand, row);
@@ -646,7 +664,7 @@ async function buildOftTechnologySummary(scope: ReportScope): Promise<CustomTabl
     { key: "sector", label: "Discipline" },
     ...OFT_METRIC_LABELS.map((label, mi) => ({ key: `Total|${mi}`, label })),
   ];
-  const disciplineRows = [...groupInto(oftRows, (r) => r.discipline).entries()]
+  const disciplineRows = [...groupInto(filteredOftRows, (r) => r.discipline).entries()]
     // Drop rows for OFT records that never had a discipline set - they render
     // as a stray blank/"0" row the reference never shows.
     .filter(([discipline]) => discipline != null && String(discipline).trim() !== "" && String(discipline).trim() !== "0")
@@ -679,17 +697,31 @@ const OFT_DEMOGRAPHIC_FIELDS = ["generalMale", "generalFemale", "obcMale", "obcF
 const CASTE_GENDER_LABELS = ["General M", "General F", "OBC M", "OBC F", "SC M", "SC F", "ST M", "ST F"];
 
 async function buildOftStateWiseDetails(scope: ReportScope): Promise<CustomTableResult> {
-  const [oftRows, states] = await Promise.all([
+  const [rawOftRows, states] = await Promise.all([
     prisma.oft.findMany({
       where: scopeAndPeriod(scope, "oft"),
       select: {
         generalMale: true, generalFemale: true, obcMale: true, obcFemale: true,
         scMale: true, scFemale: true, stMale: true, stFemale: true,
-        kvk: { select: { state: { select: { name: true } } } },
+        kvk: { select: { name: true, state: { select: { name: true } } } },
+        reportingYear: true,
+        staff: true,
+        trialOnForm: true,
+        problemDiagnosed: true,
+        status: true,
       },
     }),
     prisma.state.findMany({ where: { zoneId: scope.zoneId }, orderBy: { name: "asc" } }),
   ]);
+  // Real bug fix, 2026-09-14 - same 2.2 subsection issue as buildOftTechnologySummary above.
+  const oftRows = applyListFilter(rawOftRows, scope, {
+    kvk: (r) => r.kvk?.name ?? "",
+    reportingYear: (r) => String(r.reportingYear),
+    staff: (r) => r.staff,
+    trialOnForm: (r) => r.trialOnForm,
+    problemDiagnosed: (r) => r.problemDiagnosed ?? "",
+    status: (r) => (r.status === "COMPLETED" ? "Completed" : r.status === "TRANSFERRED" ? "Transferred to Next Year" : "Ongoing"),
+  });
 
   const columns: ReportColumn[] = [
     { key: "state", label: "States" },
@@ -3281,10 +3313,15 @@ async function buildKvkAddressTable(scope: ReportScope): Promise<CustomTableResu
     orderBy: { name: "asc" },
     select: { name: true, address: true, officePhone: true, fax: true, email: true, sanctionYear: true },
   });
+  // Real bug fix, 2026-09-14 - the View KVKs list's own column keys ("kvk"/
+  // "KVK" and "mobile"/"Mobile", page.tsx's view-kvks row mapping) never
+  // matched this table's "name"/"office" keys or labels on any of the 3
+  // ways scopeTable tries, so filtering that list and downloading always
+  // silently ignored the filter.
   const columns: ReportColumn[] = [
-    { key: "name", label: "Name of KVK" },
+    { key: "name", label: "Name of KVK", listKey: "kvk" },
     { key: "address", label: "Address" },
-    { key: "office", label: "Office", groups: [TELEPHONE] },
+    { key: "office", label: "Office", groups: [TELEPHONE], listKey: "mobile" },
     { key: "fax", label: "FAX", groups: [TELEPHONE] },
     { key: "email", label: "E-Mail" },
     { key: "sanctionYear", label: "Sanction Year" },
@@ -3337,11 +3374,19 @@ async function buildStaffTransferred(scope: ReportScope): Promise<CustomTableRes
     },
     orderBy: { transferDate: "asc" },
   });
+  // Real bug fix, 2026-09-14 - the list's own column keys (page.tsx's
+  // "staff-transferred" mapping: staffName/kvkNameBeforeTransfer/
+  // latestKvkName/dateOfRelieving) and labels ("From Transfer KVK Name",
+  // "To Transfer KVK Name", "Date of Relieving") never matched this table's
+  // own key or label on any of the 3 ways scopeTable tries - own-key, exact
+  // label, normalised label - so filtering this list by name/KVK/date and
+  // downloading always silently ignored the filter. listKey closes the gap
+  // the same way as Employee Details/Infrastructure/Vehicles/Equipment did.
   const columns: ReportColumn[] = [
-    { key: "name", label: "Name" },
-    { key: "from", label: "Transferred From" },
-    { key: "to", label: "Transferred To" },
-    { key: "date", label: "Transfer Date" },
+    { key: "name", label: "Name", listKey: "staffName" },
+    { key: "from", label: "Transferred From", listKey: "kvkNameBeforeTransfer" },
+    { key: "to", label: "Transferred To", listKey: "latestKvkName" },
+    { key: "date", label: "Transfer Date", listKey: "dateOfRelieving" },
     { key: "count", label: "No. of Transfers" },
   ];
   const rows = transfers.map((t) => ({
@@ -3693,15 +3738,24 @@ async function buildBudgetDetails(scope: ReportScope): Promise<CustomTableResult
 /** 4.2.A "District Level Data" (super-v2-prod.pdf p.84-85) - four stacked grids: general items, crop productivity, monthly weather (no backing model yet - omitted, flagged), livestock products. */
 async function buildDistrictLevelData(scope: ReportScope): Promise<CustomTableResult> {
   const where = scope.kvkId ? { kvkId: scope.kvkId } : { zoneId: scope.zoneId };
-  const [items, crops, weather, livestock] = await Promise.all([
+  const [rawItems, crops, weather, livestock] = await Promise.all([
     prisma.districtLevelData.findMany({
       where: { ...where, ...periodClause(scope, "districtLevelData") },
-      select: { items: true, information: true },
+      select: { items: true, information: true, reportingYear: true, kvk: { select: { name: true } } },
     }),
     prisma.districtCropProductivity.findMany({ where, select: { season: true, type: true, cropName: true, areaHa: true, productionMt: true, productivityQha: true, remarks: true } }),
     prisma.districtMonthlyWeather.findMany({ where, select: { month: true, rainfallMm: true, maxTempC: true, minTempC: true, maxRhPct: true, minRhPct: true, remarks: true } }),
     prisma.districtLivestockProduction.findMany({ where, select: { livestockName: true, number: true, remarks: true } }),
   ]);
+  // Real bug fix, 2026-09-14 - this leaf's own list (kvk/reportingYear/items/
+  // information) filters only this first block; the other 3 blocks are each
+  // a different leaf's own data and aren't touched by this leaf's filter.
+  const items = applyListFilter(rawItems, scope, {
+    kvk: (r) => r.kvk?.name ?? "",
+    reportingYear: (r) => String(r.reportingYear),
+    items: (r) => r.items,
+    information: (r) => r.information ?? "",
+  });
   return {
     blocks: [
       {
@@ -3845,11 +3899,18 @@ async function buildKmas(scope: ReportScope): Promise<CustomTableResult> {
 
 /** 5.3.G "Details of messages send through other channels" (super-v2-prod.pdf p.91-92) - per KVK, one row per channel, grouped "Type of messages". */
 async function buildDigitalOtherChannels(scope: ReportScope): Promise<CustomTableResult> {
-  const rows = await prisma.digitalOtherChannel.findMany({
+  const rawRows = await prisma.digitalOtherChannel.findMany({
     where: scopeAndPeriod(scope, "digitalOtherChannel"),
     include: { kvk: { select: { name: true } } },
     orderBy: { kvk: { name: "asc" } },
   });
+  // Real bug fix, 2026-09-14 - only "kvk" is filtered here: the list's other
+  // 8 columns (textAdvisories/textFarmers/...) are a stray copy-paste of the
+  // sibling KMAS leaf's fields, already flagged (2026-09-04) as not real
+  // columns of this leaf - this report correctly uses the real
+  // channel/farmersCovered/messagesXxx fields instead, which have no
+  // equivalent list column to alias them to.
+  const rows = applyListFilter(rawRows, scope, { kvk: (r) => r.kvk?.name ?? "" });
   const M = "Type of messages";
   const msgKeys = KMAS_MSG_TYPES.filter((m) => m.key !== "messagesAnyOther");
   const columns: ReportColumn[] = [
@@ -5133,11 +5194,18 @@ const N = (v: unknown): number | null => (v == null ? null : Number(v));
  * perception - straight off CfldTechnicalParameter + its Economic / SocioEconomic
  * / Perception children.
  */
-async function buildCfldTechnicalParameterKvk(kvkId: string): Promise<CustomTableResult> {
-  const records = await prisma.cfldTechnicalParameter.findMany({
+async function buildCfldTechnicalParameterKvk(scope: ReportScope): Promise<CustomTableResult> {
+  const kvkId = scope.kvkId as string;
+  const rawRecords = await prisma.cfldTechnicalParameter.findMany({
     where: { kvkId },
     include: { economicParameters: true, socioEconomicImpacts: true, farmersPerceptions: true },
     orderBy: [{ season: "asc" }, { crop: "asc" }],
+  });
+  // Real bug fix, 2026-09-14 - same list filter as the zone-level branch
+  // above (buildCfldTechnicalParameter), applied to this KVK-scoped branch too.
+  const records = applyListFilter(rawRecords, scope, {
+    crop: (r) => r.crop,
+    areaHa: (r) => stringifyValue(r.areaHa),
   });
   const S = (v: unknown) => (v == null || v === "" ? "-" : String(v));
   const D = "Number of farmers", FP = "Farmer's existing practice", DT = "Demonstration technology";
@@ -5237,7 +5305,7 @@ async function buildCfldTechnicalParameterKvk(kvkId: string): Promise<CustomTabl
  * migration batch #3.
  */
 async function buildCfldTechnicalParameter(scope: ReportScope): Promise<CustomTableResult> {
-  if (scope.kvkId) return buildCfldTechnicalParameterKvk(scope.kvkId);
+  if (scope.kvkId) return buildCfldTechnicalParameterKvk(scope);
   const rawRecords = await prisma.cfldTechnicalParameter.findMany({
     where: { zoneId: scope.zoneId },
     select: {
@@ -6193,17 +6261,21 @@ async function buildAgriDroneDemonstration(scope: ReportScope): Promise<CustomTa
  * the reference's ~15 columns (most added in migration batch #3).
  */
 async function buildFpoCbboDetails(scope: ReportScope): Promise<CustomTableResult> {
-  const records = await prisma.fpoCbboDetail.findMany({
+  const rawRecords = await prisma.fpoCbboDetail.findMany({
     where: scopeAndPeriod(scope, "fpoCbboDetail"),
     select: {
       noOfBlocksAllocated: true, noOfFposRegistered: true, avgMembersPerFpo: true,
       noOfFpoManagementCost: true, noOfFpoEquityGrant: true, techBackstoppingFpos: true,
       noOfTrainingProgrammes: true, trainingReceived: true, assistanceEconomicActivities: true,
       businessPlanPrepared: true, businessPlanWithoutCbbo: true, noOfFposDoingBusiness: true,
-      kvk: { select: { state: { select: { name: true } }, district: { select: { name: true } } } },
+      kvk: { select: { name: true, state: { select: { name: true } }, district: { select: { name: true } } } },
     },
     orderBy: { kvk: { state: { name: "asc" } } },
   });
+  // Real bug fix, 2026-09-14 - this table rolls up by state/district (no
+  // "kvk" column at all), but the list's own "kvk" filter should still
+  // narrow which underlying records feed that rollup.
+  const records = applyListFilter(rawRecords, scope, { kvk: (r) => r.kvk?.name ?? "" });
   const yn = (b: boolean) => (b ? "Yes" : "No");
   const opt = (v: number | null) => (v != null ? String(v) : "");
   const columns: ReportColumn[] = [
@@ -6215,7 +6287,7 @@ async function buildFpoCbboDetails(scope: ReportScope): Promise<CustomTableResul
     { key: "mgmtCost", label: "No. of FPO received management cost" },
     { key: "equityGrant", label: "No. of FPO received equity grant" },
     { key: "techBackstop", label: "Tech. backstopping provided to no. of FPOs" },
-    { key: "trainingProg", label: "No. of training programme organized for FPOs for technology backstopping as CBBO" },
+    { key: "trainingProg", label: "No. of training programme organized for FPOs for technology backstopping as CBBO", listKey: "noOfTrainingProgrammes" },
     { key: "trainingReceived", label: "Training received by FPO members" },
     { key: "assistance", label: "Assistance to no. of FPOs in economic activities" },
     { key: "bpCbbo", label: "Is business plan prepared for FPOs as CBBOs" },
