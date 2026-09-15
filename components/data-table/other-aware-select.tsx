@@ -71,7 +71,12 @@ export function OtherAwareSelect({
     const sorted = Array.from(values).sort((a, b) => {
       if (a === otherName) return b === otherName ? 0 : 1;
       if (b === otherName) return -1;
-      return a.localeCompare(b);
+      // `numeric: true` so "Level - 2" sorts before "Level - 10" (plain
+      // localeCompare treats these as strings and puts "Level - 10" right
+      // after "Level - 1", real bug reported 2026-09-15) - same fix belongs
+      // everywhere this component's used (Level, Discipline, Category,
+      // Sanctioned Post, ...), not just one dropdown.
+      return a.localeCompare(b, undefined, { numeric: true });
     });
     return sorted;
   }, [rows, optionKey, otherName]);

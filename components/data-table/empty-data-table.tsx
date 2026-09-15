@@ -676,7 +676,9 @@ export function EmptyDataTable({
       counts.set(value, (counts.get(value) ?? 0) + 1);
     }
     return Array.from(counts, ([value, count]) => ({ value, count })).sort(
-      (a, b) => a.value.localeCompare(b.value),
+      // `numeric: true` so "Level - 2" sorts before "Level - 10" (real bug
+      // reported 2026-09-15, same fix as OtherAwareSelect's own sort).
+      (a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }),
     );
   }
 
@@ -730,7 +732,9 @@ export function EmptyDataTable({
     if (sortEntry) {
       const [key, state] = sortEntry;
       next = [...next].sort((a, b) => {
-        const cmp = String(a[key] ?? "").localeCompare(String(b[key] ?? ""));
+        // `numeric: true` so "Level - 2" sorts before "Level - 10" (real bug
+        // reported 2026-09-15, same fix as OtherAwareSelect's own sort).
+        const cmp = String(a[key] ?? "").localeCompare(String(b[key] ?? ""), undefined, { numeric: true });
         return state.sort === "desc" ? -cmp : cmp;
       });
     }

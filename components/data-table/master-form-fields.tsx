@@ -242,7 +242,9 @@ function SourceMasterField({
   ).sort((a, b) => {
     if (a === otherName) return b === otherName ? 0 : 1;
     if (b === otherName) return -1;
-    return a.localeCompare(b);
+    // `numeric: true` so "Level - 2" sorts before "Level - 10" (real bug
+    // reported 2026-09-15, same fix as OtherAwareSelect's own sort).
+    return a.localeCompare(b, undefined, { numeric: true });
   });
   const isOtherActive = Boolean(otherName) && (value === otherName || (Boolean(value) && !options.includes(value)));
 
