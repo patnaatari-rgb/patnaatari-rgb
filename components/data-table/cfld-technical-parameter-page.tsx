@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SimpleSelect } from "@/components/ui/simple-select";
+import { OtherAwareSelect } from "./other-aware-select";
 import { PageHeader, type Crumb } from "@/components/layout/page-header";
 import {
   DemographicGrid,
@@ -109,26 +110,25 @@ export function CfldTechnicalParameterPage({
       .catch(() => {});
   }, []);
 
+  /**
+   * Season -> CFLD Crop Type -> CFLD Crop is a real 3-level cascade off
+   * CfldCropMaster (client direction, 2026-09-15) - each level only offers
+   * options once its parent is actually chosen, same as every other
+   * cascading master field in this app, rather than showing every type/crop
+   * across all seasons upfront.
+   */
   const cropTypeOptions = useMemo(
     () =>
-      Array.from(
-        new Set(cropRows.filter((r) => !technical.season || r.season === technical.season).map((r) => r.type)),
-      ).sort(),
+      technical.season
+        ? Array.from(new Set(cropRows.filter((r) => r.season === technical.season).map((r) => r.type))).sort()
+        : [],
     [cropRows, technical.season],
   );
-  const cropNameOptions = useMemo(
+  const cropNameRows = useMemo(
     () =>
-      Array.from(
-        new Set(
-          cropRows
-            .filter(
-              (r) =>
-                (!technical.season || r.season === technical.season) &&
-                (!technical.cropType || r.type === technical.cropType),
-            )
-            .map((r) => r.cropName),
-        ),
-      ).sort(),
+      technical.season && technical.cropType
+        ? cropRows.filter((r) => r.season === technical.season && r.type === technical.cropType)
+        : [],
     [cropRows, technical.season, technical.cropType],
   );
 
@@ -337,20 +337,17 @@ export function CfldTechnicalParameterPage({
               </div>
 
               <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,320px))] gap-5">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cfld-crop">
-                    CFLD Crop <span className="text-destructive">*</span>
-                  </Label>
-                  <SimpleSelect
-                    id="cfld-crop"
-                    value={technical.crop ?? ""}
-                    onValueChange={(v) => setTechnical((p) => ({ ...p, crop: v }))}
-                    placeholder={cropNameOptions.length === 0 ? "No crops available for selection" : "Select One"}
-                    disabled={cropNameOptions.length === 0}
-                    options={cropNameOptions.map((c) => ({ value: c, label: c }))}
-                    className="h-10"
-                  />
-                </div>
+                <OtherAwareSelect
+                  id="cfld-crop"
+                  label="CFLD Crop"
+                  required
+                  value={technical.crop ?? ""}
+                  onChange={(v) => setTechnical((p) => ({ ...p, crop: v }))}
+                  rows={cropNameRows}
+                  optionKey="cropName"
+                  disabled={cropNameRows.length === 0}
+                  placeholder={cropNameRows.length === 0 ? "No crops available for selection" : "Select One"}
+                />
                 {textField("cfld-variety", "Name of Variety", technical.variety ?? "", (v) =>
                   setTechnical((p) => ({ ...p, variety: v })))}
                 {textField("cfld-area", "Area (in ha)", technical.areaHa ?? "", (v) =>

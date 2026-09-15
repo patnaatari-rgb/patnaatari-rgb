@@ -35,6 +35,20 @@ const bool = (v: string | undefined) => v?.trim().toLowerCase() === "yes" || v?.
 /** Inclusive day count between two dates (e.g. 1st-3rd = 3 days stayed, not 2) - for a leaf whose real reference form has no separate "days stayed" input, just Start/End Date, with the duration shown read-only in the list table (e.g. RAWE/FET/FIT Programme). */
 const daysBetween = (start: Date, end: Date) => Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);
 
+/** `sumOf`-backed "calculated" fields - never trusted from the client, same as every other calculated field's server-side recompute. undefined (not 0) when none of the source fields were entered, so a blank set doesn't store a spurious "0". */
+function sum(v: Record<string, string>, keys: string[]) {
+  if (!keys.some((k) => v[k]?.trim())) return undefined;
+  return keys.reduce((total, k) => total + (dec(v[k]) ?? 0), 0);
+}
+
+/** `diffOf`-backed "calculated" fields (Budget Utilization's own per-item Balance = Received - Utilization, and Overall Balance = sum of all 4 items' Received - sum of all 4 items' Utilization, client direction, 2026-09-15) - never trusted from the client, same as every other calculated field's server-side recompute. undefined (not 0) when neither side had anything entered, so a blank pair doesn't store a spurious "0" balance. */
+function diff(v: Record<string, string>, receivedKeys: string[], spentKeys: string[]) {
+  const received = sum(v, receivedKeys);
+  const spent = sum(v, spentKeys);
+  if (received === undefined && spent === undefined) return undefined;
+  return (received ?? 0) - (spent ?? 0);
+}
+
 /** `fieldKind: "nf-parameters"` arrives as one JSON-stringified `{ [key]: { without, with } }` object (NfParametersField) - kept as a plain object for the Json column, `{}` when absent/malformed. */
 function parseNfParameters(raw: string | undefined): Record<string, { without: string; with: string }> {
   if (!raw) return {};
@@ -394,8 +408,10 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
       update: data,
     });
   },
-  "about-kvk/employee/employee-details": (v, ctx) =>
-    prisma.staff.create({
+  "about-kvk/employee/employee-details": (v, ctx) => {
+    const resumeUrl = str(v.resume);
+    if (!resumeUrl) throw new Error("Resume is required.");
+    return prisma.staff.create({
       data: {
         ...ctx,
         sanctionedPost: reqStr(v.sanctionedPost),
@@ -412,9 +428,10 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
         allowances: str(v.allowances),
         category: str(v.casteCategory ?? v.category),
         photoUrl: str(v.photo),
-        resumeUrl: str(v.resume),
+        resumeUrl,
       },
-    }),
+    });
+  },
 
   // --- Achievements ---
   "achievements/oft": async (v, ctx) => {
@@ -753,7 +770,8 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
       data: {
         ...ctx,
         season: reqStr(v.season),
-        activitiesOrganized: reqStr(v.activitiesOrganized),
+        activityName: reqStr(v.activityName),
+        activitiesOrganized: reqInt(v.activitiesOrganized),
         date: reqDate(v.date),
         placeOfActivity: reqStr(v.placeOfActivity),
         generalMale: int(v.generalMale) ?? 0,
@@ -766,10 +784,13 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
         stFemale: int(v.stFemale) ?? 0,
       },
     }),
-  "projects/cfld/budget-utilization": (v, ctx) =>
-    prisma.cfldBudgetUtilization.create({
-      data: { ...ctx, crop: reqStr(v.crop), season: reqStr(v.season), overallFundAllocation: reqDec(v.overallFundAllocation), areaAllotedHa: dec(v.areaAllotedHa), areaAchievedHa: dec(v.areaAchievedHa), criticalInputReceived: dec(v.criticalInputReceived), criticalInputUtilization: dec(v.criticalInputUtilization), criticalInputBalance: dec(v.criticalInputBalance), extensionReceived: dec(v.extensionReceived), extensionUtilization: dec(v.extensionUtilization), extensionBalance: dec(v.extensionBalance), publicationReceived: dec(v.publicationReceived), publicationUtilization: dec(v.publicationUtilization), publicationBalance: dec(v.publicationBalance), taDaReceived: dec(v.taDaReceived), taDaUtilization: dec(v.taDaUtilization), taDaBalance: dec(v.taDaBalance) },
-    }),
+  "projects/cfld/budget-utilization": (v, ctx) => {
+    const receivedKeys = ["criticalInputReceived", "extensionReceived", "publicationReceived", "taDaReceived"];
+    const utilizationKeys = ["criticalInputUtilization", "extensionUtilization", "publicationUtilization", "taDaUtilization"];
+    return prisma.cfldBudgetUtilization.create({
+      data: { ...ctx, crop: reqStr(v.crop), season: reqStr(v.season), overallFundAllocation: reqDec(v.overallFundAllocation), areaAllotedHa: dec(v.areaAllotedHa), areaAchievedHa: dec(v.areaAchievedHa), criticalInputReceived: dec(v.criticalInputReceived), criticalInputUtilization: dec(v.criticalInputUtilization), criticalInputBalance: diff(v, ["criticalInputReceived"], ["criticalInputUtilization"]), extensionReceived: dec(v.extensionReceived), extensionUtilization: dec(v.extensionUtilization), extensionBalance: diff(v, ["extensionReceived"], ["extensionUtilization"]), publicationReceived: dec(v.publicationReceived), publicationUtilization: dec(v.publicationUtilization), publicationBalance: diff(v, ["publicationReceived"], ["publicationUtilization"]), taDaReceived: dec(v.taDaReceived), taDaUtilization: dec(v.taDaUtilization), taDaBalance: diff(v, ["taDaReceived"], ["taDaUtilization"]), overallFundReceived: sum(v, receivedKeys), overallFundUtilized: sum(v, utilizationKeys), overallBalance: diff(v, receivedKeys, utilizationKeys) },
+    });
+  },
   "projects/cfld/crop-wise-images": (v, ctx) => {
     const imageUrl = reqStr(v.image);
     if (!imageUrl) throw new Error("An image is required.");
@@ -1694,8 +1715,10 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
   // Accept either so an edit doesn't blank the name or drop Position/Category
   // (client report, 2026-09-04: "after entering a Position, the position data
   // is not showing").
-  "about-kvk/employee/employee-details": (id, v, ctx) =>
-    prisma.staff.updateMany({
+  "about-kvk/employee/employee-details": (id, v, ctx) => {
+    const resumeUrl = str(v.resume);
+    if (!resumeUrl) throw new Error("Resume is required.");
+    return prisma.staff.updateMany({
       where: { id, ...kvkScope(ctx) },
       data: {
         sanctionedPost: reqStr(v.sanctionedPost),
@@ -1713,9 +1736,10 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
         category: str(v.casteCategory ?? v.category),
         transferStatus: str(v.transferStatus),
         photoUrl: str(v.photo),
-        resumeUrl: str(v.resume),
+        resumeUrl,
       },
-    }),
+    });
+  },
   "about-kvk/land-infrastructure/infrastructure-details": (id, v, ctx) =>
     prisma.infrastructure.updateMany({
       where: { id, ...kvkScope(ctx) },
@@ -2162,7 +2186,8 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
       where: { id, ...kvkScope(ctx) },
       data: {
         season: reqStr(v.season),
-        activitiesOrganized: reqStr(v.activitiesOrganized),
+        activityName: reqStr(v.activityName),
+        activitiesOrganized: reqInt(v.activitiesOrganized),
         date: reqDate(v.date),
         placeOfActivity: reqStr(v.placeOfActivity),
         generalMale: int(v.generalMale) ?? 0,
@@ -2175,8 +2200,11 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
         stFemale: int(v.stFemale) ?? 0,
       },
     }),
-  "projects/cfld/budget-utilization": (id, v, ctx) =>
-    prisma.cfldBudgetUtilization.updateMany({ where: { id, ...kvkScope(ctx) }, data: { crop: reqStr(v.crop), season: reqStr(v.season), overallFundAllocation: reqDec(v.overallFundAllocation), areaAllotedHa: dec(v.areaAllotedHa), areaAchievedHa: dec(v.areaAchievedHa), criticalInputReceived: dec(v.criticalInputReceived), criticalInputUtilization: dec(v.criticalInputUtilization), criticalInputBalance: dec(v.criticalInputBalance), extensionReceived: dec(v.extensionReceived), extensionUtilization: dec(v.extensionUtilization), extensionBalance: dec(v.extensionBalance), publicationReceived: dec(v.publicationReceived), publicationUtilization: dec(v.publicationUtilization), publicationBalance: dec(v.publicationBalance), taDaReceived: dec(v.taDaReceived), taDaUtilization: dec(v.taDaUtilization), taDaBalance: dec(v.taDaBalance) } }),
+  "projects/cfld/budget-utilization": (id, v, ctx) => {
+    const receivedKeys = ["criticalInputReceived", "extensionReceived", "publicationReceived", "taDaReceived"];
+    const utilizationKeys = ["criticalInputUtilization", "extensionUtilization", "publicationUtilization", "taDaUtilization"];
+    return prisma.cfldBudgetUtilization.updateMany({ where: { id, ...kvkScope(ctx) }, data: { crop: reqStr(v.crop), season: reqStr(v.season), overallFundAllocation: reqDec(v.overallFundAllocation), areaAllotedHa: dec(v.areaAllotedHa), areaAchievedHa: dec(v.areaAchievedHa), criticalInputReceived: dec(v.criticalInputReceived), criticalInputUtilization: dec(v.criticalInputUtilization), criticalInputBalance: diff(v, ["criticalInputReceived"], ["criticalInputUtilization"]), extensionReceived: dec(v.extensionReceived), extensionUtilization: dec(v.extensionUtilization), extensionBalance: diff(v, ["extensionReceived"], ["extensionUtilization"]), publicationReceived: dec(v.publicationReceived), publicationUtilization: dec(v.publicationUtilization), publicationBalance: diff(v, ["publicationReceived"], ["publicationUtilization"]), taDaReceived: dec(v.taDaReceived), taDaUtilization: dec(v.taDaUtilization), taDaBalance: diff(v, ["taDaReceived"], ["taDaUtilization"]), overallFundReceived: sum(v, receivedKeys), overallFundUtilized: sum(v, utilizationKeys), overallBalance: diff(v, receivedKeys, utilizationKeys) } });
+  },
   "projects/cfld/crop-wise-images": (id, v, ctx) => {
     const imageUrl = reqStr(v.image);
     if (!imageUrl) throw new Error("An image is required.");

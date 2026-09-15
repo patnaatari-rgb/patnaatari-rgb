@@ -115,7 +115,7 @@ export function EmployeeDetailsAddForm({ trail, backHref, id }: EmployeeDetailsF
   }, [id]);
 
   async function submit() {
-    if (!sanctionedPost || !name || !position.trim() || !mobile || !discipline || !dateOfBirth || !dateOfJoining || !category || !photo) {
+    if (!sanctionedPost || !name || !position.trim() || !mobile || !discipline || !dateOfBirth || !dateOfJoining || !category || !photo || !resume) {
       setError("Please fill all required fields.");
       return;
     }
@@ -268,7 +268,12 @@ export function EmployeeDetailsAddForm({ trail, backHref, id }: EmployeeDetailsF
               value={photo}
               onChange={setPhoto}
             />
-            <FileUploadField column={RESUME_COLUMN} fieldId="staff-resume" value={resume} onChange={setResume} />
+            <FileUploadField
+              column={{ ...RESUME_COLUMN, required: true }}
+              fieldId="staff-resume"
+              value={resume}
+              onChange={setResume}
+            />
           </div>
         </div>
 

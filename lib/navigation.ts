@@ -86,6 +86,18 @@ export type MasterColumn = {
    */
   sumOf?: string[];
   /**
+   * "calculated" only - live preview of this field as (sum of the first
+   * list's keys) minus (sum of the second list's), the other real shape
+   * besides `sumOf` - Budget Utilization's own per-item Balance = Received -
+   * Utilization (single-key lists) and Overall Balance = (sum of all 4
+   * items' Received) - (sum of all 4 items' Utilization) (client direction,
+   * 2026-09-15). Same purely-a-preview caveat as `sumOf`: the server
+   * independently recomputes this column from the same source fields on
+   * every save (leaf-record-registry.ts), never trusting whatever this
+   * preview showed.
+   */
+  diffOf?: [string[], string[]];
+  /**
    * `key: "reportingYear"` with `staticOptions` only - the Prisma model this
    * specific Reporting Year field's real years should come from (matching
    * MODEL_PERIOD_YEAR_FIELD/MODEL_PERIOD_DATE_FIELDS' own keys in
@@ -101,6 +113,8 @@ export type MasterColumn = {
   demographicPrefix?: string;
   /** demographic-breakdown only - "grid" renders the flat General/OBC/SC/ST x M/F input grid + total badges (DemographicGrid, confirmed live for Training and FLD's own Farmers Details, 2026-09-02) instead of the default General/OBC/SC/ST table (DemographicBreakdown, confirmed for CFLD/OFT/Technology Week/World Soil Day). Omit for the table. */
   demographicVariant?: "table" | "grid";
+  /** demographic-breakdown only - remaps individual DEMOGRAPHIC_KEYS suffixes to a different real field/DB column name instead of the default bare (or prefixed) suffix - for the NARI models, whose real General-pair columns are named `male`/`female`, not `generalMale`/`generalFemale` (kvk-report 3.7's own column header groups them as "General" same as OBC/SC/ST, but the schema predates this shared grid and can't be renamed without touching 5 live models). Omit for the default key. */
+  demographicKeyOverrides?: Partial<Record<"generalMale" | "generalFemale" | "obcMale" | "obcFemale" | "scMale" | "scFemale" | "stMale" | "stFemale", string>>;
   /** True for a column that only makes sense on the Add/Edit form (currently just demographic-breakdown, which represents 8 real DB columns, not one) - excluded from the list table's header/rows entirely, the opposite of `readonly` (which excludes a column from the form, not the table). */
   formOnly?: boolean;
   /** Renders as a <select> from a fixed, known-real option list (not another master's saved rows, not free text) - e.g. Institute Name's real 4-option set. */
@@ -200,28 +214,27 @@ export type SidebarIconName =
 
 const GENERIC_MASTER_COLUMNS: MasterColumn[] = [{ key: "name", label: "Name" }];
 
-/** NARI models keep `male`/`female` as the General pair; kvk-report 3.7 also needs the OBC/SC/ST split. */
+/** NARI models keep `male`/`female` as the General pair; kvk-report 3.7 also needs the OBC/SC/ST split. Real General/OBC/SC/ST x Male/Female grid with auto-computed Male/Female/Grand Total (client direction, 2026-09-15), same demographic-breakdown fieldKind as every other converted block below - `demographicKeyOverrides` remaps only the General pair onto NARI's own `male`/`female` columns, everything else uses the shared grid's default keys unchanged. */
 const NARI_CASTE_COLUMNS: MasterColumn[] = [
-  { key: "male", label: "General - Male" },
-  { key: "female", label: "General - Female" },
-  { key: "obcMale", label: "OBC - Male" },
-  { key: "obcFemale", label: "OBC - Female" },
-  { key: "scMale", label: "SC - Male" },
-  { key: "scFemale", label: "SC - Female" },
-  { key: "stMale", label: "ST - Male" },
-  { key: "stFemale", label: "ST - Female" },
+  {
+    key: "farmersDetails",
+    label: "Number of Beneficiaries",
+    fieldKind: "demographic-breakdown",
+    demographicVariant: "grid",
+    demographicKeyOverrides: { generalMale: "male", generalFemale: "female" },
+    formOnly: true,
+  },
 ];
 
-/** General/OBC/SC/ST x Male/Female flat fields for leaves whose real report table needs the farmersByCategory breakdown but uses the generic AddLeafPage form (not a bespoke dialog like CFLD's DemographicBreakdown) - the API assembles these 8 fields into one JSON object on save. */
+/** General/OBC/SC/ST x Male/Female breakdown for leaves whose real report table needs the farmersByCategory breakdown but uses the generic AddLeafPage form (not a bespoke dialog like CFLD's DemographicBreakdown) - real grid with auto-computed Male/Female/Grand Total (client direction, 2026-09-15; previously 8 flat fields with no total), same demographic-breakdown fieldKind as Training/Extension Activities/CFLD Extension Activity. The API still assembles these bare keys into one JSON object on save (farmersByCategory() in leaf-record-registry.ts), unchanged by this being a grid instead of 8 separate inputs. */
 const DEMOGRAPHIC_COLUMNS: MasterColumn[] = [
-  { key: "generalMale", label: "General - Male" },
-  { key: "generalFemale", label: "General - Female" },
-  { key: "obcMale", label: "OBC - Male" },
-  { key: "obcFemale", label: "OBC - Female" },
-  { key: "scMale", label: "SC - Male" },
-  { key: "scFemale", label: "SC - Female" },
-  { key: "stMale", label: "ST - Male" },
-  { key: "stFemale", label: "ST - Female" },
+  {
+    key: "farmersDetails",
+    label: "Number of Beneficiaries",
+    fieldKind: "demographic-breakdown",
+    demographicVariant: "grid",
+    formOnly: true,
+  },
 ];
 
 function leaf(
@@ -677,7 +690,7 @@ const oftFldMasters = group(
     ]),
     group("cfld", "CFLD Master", [
       leaf("cfld-crop", "CFLD Crop Master", [
-        { key: "season", label: "Season" },
+        { key: "season", label: "Season", sourceMaster: { master: "season", optionKey: "name" } },
         { key: "type", label: "Type" },
         { key: "cropName", label: "Crop Name" },
       ]),
@@ -1972,40 +1985,71 @@ const projects = group(
       /** Number-of-farmers columns confirmed from the client's real "Extension activities under CFLD conducted" table (CFLD Extension Activity.pdf, 2026-08-25) - General/OBC/SC/ST each split Male/Female, matching the report's own grouped column header exactly. */
       leaf("extension-activity-cfld", "Extension Activity (CFLD)", [
         { key: "kvk", label: "KVK Name", readonly: true },
-        { key: "season", label: "Season", required: true },
+        /** Season is a real dropdown sourced from Season Master (client direction, 2026-09-15), same sourceMaster pattern as every other cross-master dropdown in this file, not free text. */
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
+        /** Split into a real Name dropdown (sourced from the Extension Activity Master, same master the sibling "Extension Activities" leaf's own "Nature of Extension Activity" uses) plus a separate number count - same Name+count shape as that sibling leaf's "Nature of Extension Activity" / "No. of Activities" pair (client direction, 2026-09-15; a single merged dropdown was tried first and corrected). */
+        {
+          key: "activityName",
+          label: "Extension Activity Name",
+          required: true,
+          sourceMaster: { master: "extension-activity", optionKey: "activityName" },
+        },
         { key: "activitiesOrganized", label: "Extension Activities Organized", required: true },
         { key: "date", label: "Date", required: true },
         { key: "placeOfActivity", label: "Place of Activity", required: true },
-        { key: "generalMale", label: "General - Male" },
-        { key: "generalFemale", label: "General - Female" },
-        { key: "obcMale", label: "OBC - Male" },
-        { key: "obcFemale", label: "OBC - Female" },
-        { key: "scMale", label: "SC - Male" },
-        { key: "scFemale", label: "SC - Female" },
-        { key: "stMale", label: "ST - Male" },
-        { key: "stFemale", label: "ST - Female" },
+        /** Real General/OBC/SC/ST x Male/Female grid (client direction, 2026-09-15) - same demographic-breakdown fieldKind already auto-totalling Male/Female/Grand Total elsewhere (Training, Extension Activities), rendered here with the bare (unprefixed) keys this leaf's own columns above already used, so the existing create/update mapping in leaf-record-registry.ts needs no change. */
+        { key: "farmersDetails", label: "Extension Activity Participants", fieldKind: "demographic-breakdown", demographicVariant: "grid", formOnly: true },
       ]),
       /** Columns confirmed against the client's own "Budget Utilization" (CFLD) screenshot (AMS User Manual p.29). */
       /** Columns confirmed against the client's own live atariams.org "Budget Utilization" screenshot (2026-08-24) - a simpler, more current structure than the earlier manual screenshot's Items/Budget Received/Budget Utilization/Balance breakdown. */
       leaf("budget-utilization", "Budget Utilization", [
         { key: "kvk", label: "KVK Name", readonly: true },
         { key: "crop", label: "Crop", required: true },
-        { key: "season", label: "Season", required: true },
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "overallFundAllocation", label: "Overall Fund Allocation", required: true },
+        /** Overall Received/Utilized/Balance sit right beside Overall Fund Allocation, before the 4-item breakdown below (client direction, 2026-09-15 - moved up from after the items, so what was sanctioned vs. actually received/spent/left is comparable at a glance instead of buried at the bottom of the form). Auto-calculated across all 4 items below. */
+        {
+          key: "overallFundReceived",
+          label: "Overall Fund Received (Rs.)",
+          fieldKind: "calculated",
+          readonly: true,
+          sumOf: ["criticalInputReceived", "extensionReceived", "publicationReceived", "taDaReceived"],
+          helperText: "Auto-calculated: sum of all 4 items' Budget Received",
+        },
+        {
+          key: "overallFundUtilized",
+          label: "Overall Fund Utilized (Rs.)",
+          fieldKind: "calculated",
+          readonly: true,
+          sumOf: ["criticalInputUtilization", "extensionUtilization", "publicationUtilization", "taDaUtilization"],
+          helperText: "Auto-calculated: sum of all 4 items' Budget Utilization",
+        },
+        {
+          key: "overallBalance",
+          label: "Overall Balance (Rs.)",
+          fieldKind: "calculated",
+          readonly: true,
+          diffOf: [
+            ["criticalInputReceived", "extensionReceived", "publicationReceived", "taDaReceived"],
+            ["criticalInputUtilization", "extensionUtilization", "publicationUtilization", "taDaUtilization"],
+          ],
+          helperText: "Auto-calculated: Overall Fund Received - Overall Fund Utilized",
+        },
         { key: "areaAllotedHa", label: "Area (ha) alloted" },
         { key: "areaAchievedHa", label: "Area (ha) achieved" },
         { key: "criticalInputReceived", label: "Critical Input - Budget Received (Rs.)" },
         { key: "criticalInputUtilization", label: "Critical Input - Budget Utilization (Rs.)" },
-        { key: "criticalInputBalance", label: "Critical Input - Balance (Rs.)" },
+        /** Auto-calculated Received - Utilization (client direction, 2026-09-15) - was a manual input the user had to compute by hand. */
+        { key: "criticalInputBalance", label: "Critical Input - Balance (Rs.)", fieldKind: "calculated", readonly: true, diffOf: [["criticalInputReceived"], ["criticalInputUtilization"]], helperText: "Auto-calculated: Budget Received - Budget Utilization" },
         { key: "extensionReceived", label: "Extension Activities - Budget Received (Rs.)" },
         { key: "extensionUtilization", label: "Extension Activities - Budget Utilization (Rs.)" },
-        { key: "extensionBalance", label: "Extension Activities - Balance (Rs.)" },
+        { key: "extensionBalance", label: "Extension Activities - Balance (Rs.)", fieldKind: "calculated", readonly: true, diffOf: [["extensionReceived"], ["extensionUtilization"]], helperText: "Auto-calculated: Budget Received - Budget Utilization" },
         { key: "publicationReceived", label: "Publication - Budget Received (Rs.)" },
         { key: "publicationUtilization", label: "Publication - Budget Utilization (Rs.)" },
-        { key: "publicationBalance", label: "Publication - Balance (Rs.)" },
+        { key: "publicationBalance", label: "Publication - Balance (Rs.)", fieldKind: "calculated", readonly: true, diffOf: [["publicationReceived"], ["publicationUtilization"]], helperText: "Auto-calculated: Budget Received - Budget Utilization" },
         { key: "taDaReceived", label: "TA/DA - Budget Received (Rs.)" },
         { key: "taDaUtilization", label: "TA/DA - Budget Utilization (Rs.)" },
-        { key: "taDaBalance", label: "TA/DA - Balance (Rs.)" },
+        { key: "taDaBalance", label: "TA/DA - Balance (Rs.)", fieldKind: "calculated", readonly: true, diffOf: [["taDaReceived"], ["taDaUtilization"]], helperText: "Auto-calculated: Budget Received - Budget Utilization" },
       ]),
       /** New leaf, confirmed against the client's own "Crop wise Photographs" screenshot (AMS User Manual p.27) - not present before this pass. */
       leaf("crop-wise-images", "Crop Wise Images", [
@@ -2290,7 +2334,7 @@ const projects = group(
         { key: "farmingSituation", label: "Farming Situation", required: true },
         { key: "latitude", label: "Latitude (N)", required: true },
         { key: "longitude", label: "Longitude (E)", required: true },
-        { key: "season", label: "Season", required: true },
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "technologyDemonstrated", label: "NF Component/Technology Demonstrated", required: true },
         { key: "areaHa", label: "Area (ha) in NF Practice", required: true },
         { key: "farmerPracticeDetail", label: "Detail of Farmer Practice", required: true },
@@ -2340,7 +2384,7 @@ const projects = group(
       ]),
       leaf("nf-soil-data", "Soil Data information", [
         { key: "kvk", label: "KVK Name", readonly: true },
-        { key: "season", label: "Season", required: true },
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "type", label: "Type", required: true },
         { key: "crop", label: "Crop", required: true },
         { key: "beforePh", label: "Before pH", required: true },
@@ -2416,7 +2460,7 @@ const projects = group(
         [
           { key: "kvk", label: "KVK Name", readonly: true },
           { key: "nutriSmartVillage", label: "Name of Nutri-Smart Village", required: true },
-          { key: "season", label: "Season", required: true },
+          { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
           { key: "activity", label: "Activity", required: true, sourceMaster: { master: "nari-activity", optionKey: "name" } },
           { key: "categoryOfCrop", label: "Category of crop", required: true, sourceMaster: { master: "nari-crop-category", optionKey: "name" } },
           { key: "numberOfCrops", label: "No. of Crops", required: true },
@@ -2634,7 +2678,7 @@ const projects = group(
     group("cra", "Climate Resilient Agriculture (CRA)", [
       leaf("cra-details", "CRA Details", [
         { key: "kvk", label: "KVK Name", readonly: true },
-        { key: "season", label: "Season", required: true },
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "technologyDemonstrated", label: "Technology Demonstrated", required: true },
         { key: "croppingSystem", label: "Cropping System", required: true, sourceMaster: { master: "cropping-system", optionKey: "cropName" } },
         { key: "areaHa", label: "Area (ha)", required: true },
@@ -2669,7 +2713,7 @@ const projects = group(
         "Details of Cereal Systems Initiative for South Asia",
         [
           { key: "kvk", label: "KVK Name", readonly: true },
-          { key: "season", label: "Season", required: true },
+          { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
           { key: "villageCovered", label: "Village Covered(no.)", required: true },
           { key: "blockCovered", label: "Block Covered(no.)", required: true },
           { key: "districtCovered", label: "District Covered(no.)", required: true },
@@ -2694,7 +2738,7 @@ const projects = group(
     group("seed-hub", "Seed Hub Program", [
       leaf("seed-hub-program", "Seed Hub Program", [
         { key: "kvk", label: "KVK Name", readonly: true },
-        { key: "season", label: "Season", required: true },
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "cropName", label: "Crop Name", required: true },
         { key: "variety", label: "Variety", required: true },
         { key: "areaHa", label: "Area (ha)", required: true },
@@ -2867,7 +2911,7 @@ const performanceIndicators = group(
       ]),
       leaf("district-crop-productivity", "Productivity of Major Crops", [
         { key: "kvk", label: "KVK", readonly: true },
-        { key: "season", label: "Season", required: true },
+        { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "type", label: "Type", required: true },
         { key: "cropName", label: "Name of Crop", required: true },
         { key: "areaHa", label: "Area (Ha)", required: true },
@@ -2947,7 +2991,7 @@ const performanceIndicators = group(
         { key: "cropName", label: "Name of the Crop", required: true },
         { key: "areaHa", label: "Area (ha)", required: true },
         // Real reference (2026-09-03) has all 7 of these required, and none are columns on its own table (own table: KVK/Crop/Area only) - hidden from ours to match.
-        { key: "season", label: "Season", required: true, formOnly: true },
+        { key: "season", label: "Season", required: true, formOnly: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "variety", label: "Variety", required: true, formOnly: true },
         { key: "produceType", label: "Type of Produce", required: true, formOnly: true },
         { key: "qty", label: "Qty. (q)", required: true, formOnly: true },

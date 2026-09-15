@@ -85,8 +85,8 @@ const MODEL_FIELDS: Record<string, string[]> = {
   scientistAward: ["headScientist", "award", "amount", "achievement", "conferringAuthority"],
   farmerAward: ["farmerName", "address", "contactNumber", "award", "amount", "achievement", "conferringAuthority"],
   cfldTechnicalParameter: ["reportingYear", "month", "season", "crop", "cropDemonstrated", "areaHa", "numberOfFarmers", "detailOfTechnologyDemonstrated", "existingFarmerPractice", "yieldFarmerFieldQha", "yieldDemoMaxQha", "yieldDemoMinQha", "yieldDemoAvgQha", "yieldGapKgHaDistrict", "yieldGapKgHaState", "yieldGapKgHaPotential", "yieldGapMinimizedPercentDistrict", "yieldGapMinimizedPercentState", "yieldGapMinimizedPercentPotential", "percentIncrease", "districtYield", "stateYield", "potentialYield", "status"],
-  cfldExtensionActivity: ["season", "activitiesOrganized", "date", "placeOfActivity", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
-  cfldBudgetUtilization: ["crop", "season", "overallFundAllocation"],
+  cfldExtensionActivity: ["season", "activityName", "activitiesOrganized", "date", "placeOfActivity", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
+  cfldBudgetUtilization: ["crop", "season", "overallFundAllocation", "overallFundReceived", "overallFundUtilized", "overallBalance"],
   cfldSocioEconomicImpact: ["cropDemonstrated", "totalProduceObtainedKg", "produceSoldKgPerHousehold", "sellingRatePerKg", "produceUsedOwnFarmKg", "produceDistributedToOthersKg", "purposeOfIncomeUtilized", "employmentGeneratedMandays"],
   nicraBasicInformation: ["rfDistrictNormal", "rfDistrictReceived", "maxTemperature", "minTemperature"],
   nicraDetails: ["cropName", "seasonName", "technologyDemonstration", "noOfFarmers"],
@@ -4355,7 +4355,7 @@ async function buildCfldExtensionActivity(scope: ReportScope): Promise<CustomTab
   const rawRecords = await prisma.cfldExtensionActivity.findMany({
     where: scopeAndPeriod(scope, "cfldExtensionActivity"),
     select: {
-      activitiesOrganized: true, season: true, date: true, placeOfActivity: true, ...CASTE_SELECT,
+      activityName: true, activitiesOrganized: true, season: true, date: true, placeOfActivity: true, ...CASTE_SELECT,
       kvk: { select: { name: true } },
     },
     orderBy: [{ kvkId: "asc" }, { date: "asc" }],
@@ -4367,7 +4367,8 @@ async function buildCfldExtensionActivity(scope: ReportScope): Promise<CustomTab
   const records = applyListFilter(rawRecords, scope, {
     kvk: (r: R) => r.kvk.name,
     season: (r: R) => r.season,
-    activitiesOrganized: (r: R) => r.activitiesOrganized,
+    activityName: (r: R) => r.activityName,
+    activitiesOrganized: (r: R) => String(r.activitiesOrganized),
     date: (r: R) => r.date.toISOString().slice(0, 10),
     placeOfActivity: (r: R) => r.placeOfActivity,
     generalMale: (r: R) => String(r.generalMale),
@@ -4387,7 +4388,7 @@ async function buildCfldExtensionActivity(scope: ReportScope): Promise<CustomTab
   ];
   if (records.length === 0) return { columns, keepEmpty: true };
   const rowOf = (r: R) => ({
-    activity: r.activitiesOrganized,
+    activity: r.activityName,
     season: r.season,
     datePlace: `${stringifyValue(r.date)} and ${r.placeOfActivity}`,
     ...casteMftRow([r], "", true),

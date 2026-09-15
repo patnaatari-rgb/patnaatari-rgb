@@ -60,7 +60,7 @@ import {
 import { ColumnFilterMenu, type ColumnFilterState } from "./column-filter-menu";
 import type { MasterColumn } from "@/lib/navigation";
 import { EventDemographicDialog } from "./event-demographic-dialog";
-import { MasterFormFields, DEMOGRAPHIC_KEYS, prefixedDemographicKey } from "./master-form-fields";
+import { MasterFormFields, DEMOGRAPHIC_KEYS, resolveDemographicKey } from "./master-form-fields";
 
 export type MasterTab = { label: string; href: string; active: boolean };
 
@@ -595,10 +595,9 @@ export function EmptyDataTable({
     const values: Record<string, string> = {};
     for (const column of editColumns) {
       if (column.fieldKind === "demographic-breakdown") {
-        // Represents 8 real row fields (prefix + DEMOGRAPHIC_KEYS), not row[column.key] itself.
-        const prefix = column.demographicPrefix ?? "";
+        // Represents 8 real row fields (prefix/overrides + DEMOGRAPHIC_KEYS), not row[column.key] itself.
         for (const suffix of DEMOGRAPHIC_KEYS) {
-          const key = prefixedDemographicKey(prefix, suffix);
+          const key = resolveDemographicKey(column, suffix);
           const value = row[key];
           values[key] = typeof value === "string" || typeof value === "number" ? String(value) : "";
         }

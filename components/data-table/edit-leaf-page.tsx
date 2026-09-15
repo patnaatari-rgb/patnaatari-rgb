@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader, type Crumb } from "@/components/layout/page-header";
-import { MasterFormFields, DEMOGRAPHIC_KEYS, prefixedDemographicKey, matchesShowWhen } from "./master-form-fields";
+import { MasterFormFields, DEMOGRAPHIC_KEYS, resolveDemographicKey, matchesShowWhen } from "./master-form-fields";
 import type { MasterColumn } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
@@ -95,9 +95,8 @@ export function EditLeafPage({
       const values: Record<string, string> = {};
       for (const column of columns) {
         if (column.fieldKind === "demographic-breakdown") {
-          const prefix = column.demographicPrefix ?? "";
           for (const suffix of DEMOGRAPHIC_KEYS) {
-            const key = prefixedDemographicKey(prefix, suffix);
+            const key = resolveDemographicKey(column, suffix);
             values[key] = row[key] != null ? String(row[key]) : "";
           }
           continue;

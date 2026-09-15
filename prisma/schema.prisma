@@ -1728,7 +1728,8 @@ model CfldExtensionActivity {
   kvk                 Kvk      @relation(fields: [kvkId], references: [id])
   zoneId              String
   season              String
-  activitiesOrganized String
+  activityName        String
+  activitiesOrganized Int
   date                DateTime
   placeOfActivity     String
   generalMale         Int      @default(0)
@@ -1755,6 +1756,10 @@ model CfldBudgetUtilization {
   crop                  String
   season                String
   overallFundAllocation Decimal @db.Decimal(14, 2)
+  /// Auto-calculated (client direction, 2026-09-15) - Received/Utilized are each the sum of the 4 items' own Received/Utilization below, Balance is Received - Utilized. Shown alongside overallFundAllocation so what was sanctioned vs. actually received/spent is comparable at a glance.
+  overallFundReceived Decimal? @db.Decimal(14, 2)
+  overallFundUtilized Decimal? @db.Decimal(14, 2)
+  overallBalance      Decimal? @db.Decimal(14, 2)
   /// Report 3.1.C "Budget Utilization" columns (super-v2-prod.pdf p.58-59): area alloted/achieved, then a fixed 4-item budget breakdown (Critical Input / Extension Activities / Publication / TA-DA) each with Received / Utilization / Balance.
   areaAllotedHa    Decimal? @db.Decimal(10, 2)
   areaAchievedHa   Decimal? @db.Decimal(10, 2)

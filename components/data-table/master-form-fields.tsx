@@ -27,6 +27,11 @@ export function prefixedDemographicKey(prefix: string, suffix: string): string {
   return prefix ? `${prefix}${suffix[0].toUpperCase()}${suffix.slice(1)}` : suffix;
 }
 
+/** Resolves one DEMOGRAPHIC_KEYS suffix to its real field/DB column name for a given column - `demographicKeyOverrides` (e.g. NARI's General pair being `male`/`female`, not `generalMale`/`generalFemale`) wins when set, otherwise falls back to the normal prefix convention. Shared by every reader/writer of a demographic-breakdown block so they can never drift out of sync. */
+export function resolveDemographicKey(column: MasterColumn, suffix: (typeof DEMOGRAPHIC_KEYS)[number]): string {
+  return column.demographicKeyOverrides?.[suffix] ?? prefixedDemographicKey(column.demographicPrefix ?? "", suffix);
+}
+
 /** Whether a `showWhen`-gated column should be visible / validated given the current form values. */
 export function matchesShowWhen(
   showWhen: NonNullable<MasterColumn["showWhen"]>,
@@ -481,9 +486,12 @@ export function MasterFormFields({
           // server always recomputes this column itself from the same
           // fields on save (leaf-record-registry.ts), so a derived render-time
           // value here can never drift from what actually gets saved.
+          const sumKeys = (keys: string[]) => keys.reduce((sum, key) => sum + (Number(formValues[key]) || 0), 0);
           const displayValue = column.sumOf
-            ? String(column.sumOf.reduce((sum, key) => sum + (Number(formValues[key]) || 0), 0))
-            : (formValues[column.key] ?? "");
+            ? String(sumKeys(column.sumOf))
+            : column.diffOf
+              ? String(sumKeys(column.diffOf[0]) - sumKeys(column.diffOf[1]))
+              : (formValues[column.key] ?? "");
           return (
             <div key={column.key} className="space-y-1.5">
               <Label htmlFor={fieldId}>
@@ -496,13 +504,15 @@ export function MasterFormFields({
         }
 
         if (column.fieldKind === "demographic-breakdown") {
-          const prefix = column.demographicPrefix ?? "";
           const demoValues: DemographicValues = {};
           for (const suffix of DEMOGRAPHIC_KEYS) {
-            demoValues[suffix] = formValues[prefixedDemographicKey(prefix, suffix)] ?? "";
+            demoValues[suffix] = formValues[resolveDemographicKey(column, suffix)] ?? "";
           }
-          const demoOnChange = (key: string, value: string) =>
-            onChange({ ...formValues, [prefixedDemographicKey(prefix, key)]: value });
+          const demoOnChange = (suffix: string, value: string) =>
+            onChange({
+              ...formValues,
+              [resolveDemographicKey(column, suffix as (typeof DEMOGRAPHIC_KEYS)[number])]: value,
+            });
           return (
             <div key={column.key} className="space-y-2 sm:col-span-2 lg:col-span-3">
               <p className="text-lg font-semibold text-primary">{column.label}</p>

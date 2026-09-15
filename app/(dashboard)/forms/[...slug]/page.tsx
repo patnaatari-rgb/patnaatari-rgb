@@ -1241,7 +1241,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         season: r.season,
-        activitiesOrganized: r.activitiesOrganized,
+        activityName: r.activityName,
+        activitiesOrganized: String(r.activitiesOrganized),
         date: r.date.toISOString().slice(0, 10),
         placeOfActivity: r.placeOfActivity,
         generalMale: String(r.generalMale),
@@ -1268,6 +1269,23 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         crop: r.crop,
         season: r.season,
         overallFundAllocation: String(r.overallFundAllocation),
+        areaAllotedHa: r.areaAllotedHa != null ? String(r.areaAllotedHa) : "",
+        areaAchievedHa: r.areaAchievedHa != null ? String(r.areaAchievedHa) : "",
+        criticalInputReceived: r.criticalInputReceived != null ? String(r.criticalInputReceived) : "",
+        criticalInputUtilization: r.criticalInputUtilization != null ? String(r.criticalInputUtilization) : "",
+        criticalInputBalance: r.criticalInputBalance != null ? String(r.criticalInputBalance) : "",
+        extensionReceived: r.extensionReceived != null ? String(r.extensionReceived) : "",
+        extensionUtilization: r.extensionUtilization != null ? String(r.extensionUtilization) : "",
+        extensionBalance: r.extensionBalance != null ? String(r.extensionBalance) : "",
+        publicationReceived: r.publicationReceived != null ? String(r.publicationReceived) : "",
+        publicationUtilization: r.publicationUtilization != null ? String(r.publicationUtilization) : "",
+        publicationBalance: r.publicationBalance != null ? String(r.publicationBalance) : "",
+        taDaReceived: r.taDaReceived != null ? String(r.taDaReceived) : "",
+        taDaUtilization: r.taDaUtilization != null ? String(r.taDaUtilization) : "",
+        taDaBalance: r.taDaBalance != null ? String(r.taDaBalance) : "",
+        overallFundReceived: r.overallFundReceived != null ? String(r.overallFundReceived) : "",
+        overallFundUtilized: r.overallFundUtilized != null ? String(r.overallFundUtilized) : "",
+        overallBalance: r.overallBalance != null ? String(r.overallBalance) : "",
       })),
       totalCount: rows.length,
     };
@@ -1323,6 +1341,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         seasonName: r.seasonName,
         technologyDemonstration: r.technologyDemonstration,
         noOfFarmers: String(r.noOfFarmers),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1345,6 +1367,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         startDate: r.startDate.toISOString().slice(0, 10),
         endDate: r.endDate.toISOString().slice(0, 10),
         farmersAttended: String(r.farmersAttended),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1363,6 +1389,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         startDate: r.startDate.toISOString().slice(0, 10),
         endDate: r.endDate.toISOString().slice(0, 10),
         farmersAttended: String(r.farmersAttended),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1417,6 +1447,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         hoursUsed: String(r.hoursUsed),
         revenueGenerated: String(r.revenueGenerated),
         repairExpenditure: String(r.repairExpenditure),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1457,6 +1491,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         samplesAnalysed: String(r.samplesAnalysed),
         shcIssued: String(r.shcIssued),
         farmersBenefitted: String(r.farmersBenefitted),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1583,6 +1621,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         trainingDate: r.trainingDate.toISOString().slice(0, 10),
         venue: r.venue,
         participants: String(r.participants),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1730,6 +1772,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         typeOfNutritionalGarden: r.typeOfNutritionalGarden,
         numbers: String(r.numbers),
         areaSqm: String(r.areaSqm),
+        male: String(r.male), female: String(r.female),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1747,6 +1793,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         season: r.season,
         activity: r.activity,
         categoryOfCrop: r.categoryOfCrop,
+        male: String(r.male), female: String(r.female),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1764,6 +1814,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         cropName: r.cropName,
         valueAddedProduct: r.valueAddedProduct,
         activity: r.activity,
+        male: String(r.male), female: String(r.female),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1781,6 +1835,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         areaOfTraining: r.areaOfTraining,
         activity: r.activity,
         titleOfTraining: r.titleOfTraining,
+        male: String(r.male), female: String(r.female),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1798,6 +1856,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         activity: r.activity,
         nameOfActivity: r.nameOfActivity,
         noOfActivities: String(r.noOfActivities),
+        male: String(r.male), female: String(r.female),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1839,6 +1901,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         noOfDemos: String(r.noOfDemos),
         areaCovered: String(r.areaCovered),
         noOfFarmers: String(r.noOfFarmers),
+        generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
+        obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
+        scMale: String(r.scMale), scFemale: String(r.scFemale),
+        stMale: String(r.stMale), stFemale: String(r.stFemale),
       })),
       totalCount: rows.length,
     };
@@ -1904,16 +1970,27 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       orderBy: { createdAt: "desc" },
     });
     formData = {
-      rows: rows.map((r) => ({
-        id: r.id,
-        kvk: r.kvk.name,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
-        training: r.training ?? "",
-        flds: r.flds ?? "",
-        awarenessCamps: r.awarenessCamps ?? "",
-        distributionOfLiterature: r.distributionOfLiterature ?? "",
-      })),
+      rows: rows.map((r) => {
+        const category = (r.farmersByCategory ?? {}) as Record<string, string>;
+        return {
+          id: r.id,
+          kvk: r.kvk.name,
+          startDate: r.startDate.toISOString().slice(0, 10),
+          endDate: r.endDate.toISOString().slice(0, 10),
+          training: r.training ?? "",
+          flds: r.flds ?? "",
+          awarenessCamps: r.awarenessCamps ?? "",
+          distributionOfLiterature: r.distributionOfLiterature ?? "",
+          generalMale: category.generalMale ?? "",
+          generalFemale: category.generalFemale ?? "",
+          obcMale: category.obcMale ?? "",
+          obcFemale: category.obcFemale ?? "",
+          scMale: category.scMale ?? "",
+          scFemale: category.scFemale ?? "",
+          stMale: category.stMale ?? "",
+          stFemale: category.stFemale ?? "",
+        };
+      }),
       totalCount: rows.length,
     };
   } else if (user && node.type === "leaf" && node.slug === "cra-details") {
@@ -1923,15 +2000,26 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       orderBy: { createdAt: "desc" },
     });
     formData = {
-      rows: rows.map((r) => ({
-        id: r.id,
-        kvk: r.kvk.name,
-        season: r.season,
-        technologyDemonstrated: r.technologyDemonstrated,
-        croppingSystem: r.croppingSystem,
-        areaHa: String(r.areaHa),
-        noOfFarmer: String(r.noOfFarmer),
-      })),
+      rows: rows.map((r) => {
+        const category = (r.farmersByCategory ?? {}) as Record<string, string>;
+        return {
+          id: r.id,
+          kvk: r.kvk.name,
+          season: r.season,
+          technologyDemonstrated: r.technologyDemonstrated,
+          croppingSystem: r.croppingSystem,
+          areaHa: String(r.areaHa),
+          noOfFarmer: String(r.noOfFarmer),
+          generalMale: category.generalMale ?? "",
+          generalFemale: category.generalFemale ?? "",
+          obcMale: category.obcMale ?? "",
+          obcFemale: category.obcFemale ?? "",
+          scMale: category.scMale ?? "",
+          scFemale: category.scFemale ?? "",
+          stMale: category.stMale ?? "",
+          stFemale: category.stFemale ?? "",
+        };
+      }),
       totalCount: rows.length,
     };
   } else if (user && node.type === "leaf" && node.slug === "cra-extension-activity") {
@@ -1995,15 +2083,26 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       orderBy: { createdAt: "desc" },
     });
     formData = {
-      rows: rows.map((r) => ({
-        id: r.id,
-        kvk: r.kvk.name,
-        programmeName: r.programmeName,
-        programmeDate: r.programmeDate.toISOString().slice(0, 10),
-        venue: r.venue ?? "",
-        purpose: r.purpose ?? "",
-        participants: String(r.participants),
-      })),
+      rows: rows.map((r) => {
+        const category = (r.farmersByCategory ?? {}) as Record<string, string>;
+        return {
+          id: r.id,
+          kvk: r.kvk.name,
+          programmeName: r.programmeName,
+          programmeDate: r.programmeDate.toISOString().slice(0, 10),
+          venue: r.venue ?? "",
+          purpose: r.purpose ?? "",
+          participants: String(r.participants),
+          generalMale: category.generalMale ?? "",
+          generalFemale: category.generalFemale ?? "",
+          obcMale: category.obcMale ?? "",
+          obcFemale: category.obcFemale ?? "",
+          scMale: category.scMale ?? "",
+          scFemale: category.scFemale ?? "",
+          stMale: category.stMale ?? "",
+          stFemale: category.stFemale ?? "",
+        };
+      }),
       totalCount: rows.length,
     };
   } else if (user && node.type === "leaf" && node.slug === "impact-of-kvk-activities") {
