@@ -10,11 +10,17 @@ import { CREATABLE_ROLE_SLUGS } from "@/lib/rbac-server";
  * Super Admin/State/District/Org/KVK Admin ever look at this list (the
  * "User" siblings have no management UI of their own in the spec).
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
-  const where =
+  const url = new URL(request.url);
+  /** Server-side pagination + search - the list used to always return every user in scope (fine at a handful of accounts, a real problem once a zone has hundreds+), re-fetched in full on every 20s poll too. `page` is 0-based; `pageSize` capped so a crafted request can't force an unbounded fetch. */
+  const page = Math.max(0, Number(url.searchParams.get("page") ?? "0") || 0);
+  const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") ?? "10") || 10));
+  const search = (url.searchParams.get("search") ?? "").trim();
+
+  const scopeWhere =
     auth.session.role === "SUPER_ADMIN"
       ? { zoneId: auth.session.zoneId }
       : auth.session.roleScope === "STATE" && auth.session.stateId
@@ -25,11 +31,26 @@ export async function GET() {
             ? { hostOrgId: auth.session.hostOrgId }
             : { kvkId: auth.session.kvkId ?? "__none__" };
 
-  const users = await prisma.user.findMany({
-    where,
-    include: { kvk: true, state: true, district: true, hostOrg: true, assignedRole: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const where = search
+    ? {
+        ...scopeWhere,
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          { email: { contains: search, mode: "insensitive" as const } },
+        ],
+      }
+    : scopeWhere;
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: { kvk: true, state: true, district: true, hostOrg: true, assignedRole: true },
+      orderBy: { createdAt: "desc" },
+      skip: page * pageSize,
+      take: pageSize,
+    }),
+    prisma.user.count({ where }),
+  ]);
 
   const lastLogins = await prisma.loginActivity.groupBy({
     by: ["userId"],
@@ -39,6 +60,7 @@ export async function GET() {
   const lastLoginByUserId = new Map(lastLogins.map((l) => [l.userId, l._max.createdAt]));
 
   return NextResponse.json({
+    total,
     users: users.map((u) => ({
       id: u.id,
       name: u.name ?? u.username,

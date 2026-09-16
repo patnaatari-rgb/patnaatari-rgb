@@ -114,8 +114,11 @@ export function UserManagementView() {
   const session = useSession();
   const isSuperAdmin = session.role === "super-admin";
   const [search, setSearch] = useState("");
+  /** Debounced so typing doesn't fire a request per keystroke - the search box only queries the server 350ms after the user stops typing. */
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -129,13 +132,19 @@ export function UserManagementView() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  /** `silent` skips the loading state - used for background polling refreshes so the table doesn't flash "Loading users..." over data that's already on screen. */
+  /** 10 rows per page, matching the reference "View Users" table. */
+  const PAGE_SIZE = 10;
+
+  /** `silent` skips the loading state - used for background polling refreshes so the table doesn't flash "Loading users..." over data that's already on screen. Search + pagination now happen server-side (see /api/users) so this only ever fetches the current page's 10 rows, not the whole scope every time. */
   function loadUsers(silent = false) {
     if (!silent) setLoading(true);
-    fetch("/api/users")
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    fetch(`/api/users?${params.toString()}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: { users: UserRow[] }) => {
+      .then((data: { users: UserRow[]; total: number }) => {
         setUsers(data.users);
+        setTotal(data.total);
         setListError(null);
       })
       .catch(() => {
@@ -144,20 +153,21 @@ export function UserManagementView() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => loadUsers(), []);
+  // Debounce the search box - waits 350ms after typing stops before it becomes the query actually sent to the server.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(0);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  useEffect(() => loadUsers(), [page, debouncedSearch]);
   usePolling(() => loadUsers(true));
 
-  const filtered = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  /** 10 rows per page, matching the reference "View Users" table. */
-  const PAGE_SIZE = 10;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
-  const pageRows = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = users;
 
   function openEdit(user: UserRow) {
     setEditUser(user);
@@ -289,7 +299,7 @@ export function UserManagementView() {
                 {listError}
               </TableCell>
             </TableRow>
-          ) : filtered.length === 0 ? (
+          ) : pageRows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={6} className="px-4 py-16 text-center text-muted-foreground">
                 No users found.
@@ -343,8 +353,8 @@ export function UserManagementView() {
 
       <div className="flex items-center justify-between border-t border-border px-4 py-3 text-sm text-muted-foreground">
         <span>
-          Showing {filtered.length === 0 ? 0 : currentPage * PAGE_SIZE + 1} to{" "}
-          {currentPage * PAGE_SIZE + pageRows.length} of {filtered.length} entries
+          Showing {total === 0 ? 0 : currentPage * PAGE_SIZE + 1} to{" "}
+          {currentPage * PAGE_SIZE + pageRows.length} of {total} entries
         </span>
         <div className="flex items-center gap-2">
           <Button
