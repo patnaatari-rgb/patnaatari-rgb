@@ -16,6 +16,7 @@ import {
 } from "./demographic-breakdown";
 import { FormPhotosField, type FormPhoto } from "./form-photos-field";
 import { percentIncreaseInYield, yieldGapMinimizedPercent } from "@/lib/cfld-formulas";
+import { MONTH_NAMES } from "@/lib/months";
 import { CFLD_TABS as TABS, cfldTabDisplayLabel, type CfldTabName } from "@/lib/cfld-technical-parameter-tabs";
 
 const ECONOMIC_FIELDS = [
@@ -298,10 +299,7 @@ export function CfldTechnicalParameterPage({
                     value={technical.month ?? ""}
                     onValueChange={(v) => setTechnical((p) => ({ ...p, month: v }))}
                     placeholder="Select One"
-                    options={[
-                      "January", "February", "March", "April", "May", "June",
-                      "July", "August", "September", "October", "November", "December",
-                    ].map((m) => ({ value: m, label: m }))}
+                    options={MONTH_NAMES.map((m) => ({ value: m, label: m }))}
                     className="h-10"
                   />
                 </div>

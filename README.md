@@ -24,6 +24,9 @@ npx prisma migrate deploy
 npm run dev
 ```
 
+Other commands: `npm test` (unit / consistency suite, no database needed),
+`npm run lint`, `npx tsc --noEmit`.
+
 Open [http://localhost:3000](http://localhost:3000).
 
 `.env.local` is git-ignored - never commit real secrets. Values come from the
@@ -33,6 +36,7 @@ Neon resource connected via the Vercel Marketplace integration
 ## Project structure
 
 ```text
+proxy.ts                       # request gate: session check + Super-Admin-only route prefixes
 app/
   (auth)/login/                # sign-in
   (dashboard)/                 # sidebar + topbar shell and every panel route
@@ -52,12 +56,44 @@ lib/
 prisma/
   schema.prisma                # full data model
   migrations/                  # ordered SQL migrations (apply with `prisma migrate deploy`)
-scripts/                       # one-off data import / backfill utilities (read .env.local)
+scripts/                       # one-off data import / backfill utilities (see scripts/README.md)
+tests/                         # Vitest suite (see "Testing")
 ```
 
 `lib/navigation.ts` drives the sidebar and the dynamic `/masters/[...slug]`
 and `/forms/[...slug]` routes, so a new master / form page is a config entry,
 not a hand-built screen.
+
+## Adding a Form Management page
+
+A saveable form ("leaf") is defined in several places that must agree.
+`tests/leaf-wiring.test.ts` fails if one is missed:
+
+1. `lib/navigation.ts` - the leaf and its columns (label, input kind, dropdown source).
+2. `prisma/schema.prisma` + a migration - the table.
+3. `lib/leaf-record-registry.ts` - the create, update and delete handlers (all three are scoped to the caller's KVK / zone).
+4. `lib/form-summary-data.ts` - which model Form Summary counts for the leaf.
+5. `lib/report-section-map.ts` and `lib/report-data.ts` - where the leaf appears in the report.
+6. `app/(dashboard)/forms/[...slug]/page.tsx` - the list rows shown for the leaf.
+
+A count that should equal the sum of a beneficiary grid is declared with
+`BENEFICIARY_TOTAL` in `lib/navigation.ts`; the server recomputes it on every
+save and never trusts the browser's value.
+
+## Testing
+
+`npm test` runs the Vitest suite in `tests/`. It uses an in-memory stand-in for
+Prisma, so it needs no database and never writes data. It checks:
+
+- navigation tree invariants (unique keys, dropdowns, calculated fields, label hygiene)
+- every leaf is wired into create / update / delete, Form Summary and the report map
+- report column config against `schema.prisma`
+- that a KVK cannot change or delete another KVK's record (and a Super Admin only their own zone)
+- that server-side totals ignore what the browser sent
+- that every API route requires a session unless it is listed as open on purpose
+
+Known lint noise: `react-hooks/set-state-in-effect` is kept as a warning (see
+`eslint.config.mjs`); the load-a-record-on-mount effects it flags are intentional.
 
 ## Reports
 

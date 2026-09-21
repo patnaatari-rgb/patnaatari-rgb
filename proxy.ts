@@ -27,7 +27,7 @@ const SUPER_ADMIN_ONLY_PREFIXES = ["/masters", "/user-management", "/role-manage
  * guard for a missing AUTH_SECRET, so `encode(undefined)` would have
  * silently become a valid (if weak) signing key instead of failing closed.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
 
   if (token) {
@@ -40,7 +40,11 @@ export async function middleware(request: NextRequest) {
       if (superAdminOnly && payload.role !== "SUPER_ADMIN") {
         return NextResponse.redirect(new URL("/dashboard", request.url));
       }
-      return NextResponse.next();
+      // The layout reads this to title the page on the server (lib/page-title.ts). Set here, never taken from the client: any
+      // x-pathname header the browser sent is replaced.
+      const forwarded = new Headers(request.headers);
+      forwarded.set("x-pathname", pathname);
+      return NextResponse.next({ request: { headers: forwarded } });
     } catch {
       // fall through to redirect
     }

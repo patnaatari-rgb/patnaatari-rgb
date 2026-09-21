@@ -8,11 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SimpleSelect } from "@/components/ui/simple-select";
 import { PageHeader, type Crumb } from "@/components/layout/page-header";
+import { MONTH_NAMES } from "@/lib/months";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 const QUARTERS = [1, 2, 3, 4, 5, 6];
 const YES_NO = [
   { value: "Yes", label: "Yes" },
@@ -218,7 +215,7 @@ export function StaffQuartersForm({ trail, backHref, id, title }: StaffQuartersF
                 </tr>
               </thead>
               <tbody>
-                {MONTHS.map((month, index) => (
+                {MONTH_NAMES.map((month, index) => (
                   <tr key={month} className="border-b border-border/60">
                     <td className="py-2 pr-3 font-medium whitespace-nowrap">{month}</td>
                     {QUARTERS.map((q) => (

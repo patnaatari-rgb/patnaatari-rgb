@@ -222,6 +222,7 @@ export default function DashboardPage() {
         if (data) setNatureOptions(data.rows.map((r) => r.activityName).filter(Boolean));
       })
       .catch(() => {});
+    // Initial load, once per role. `loadStats` is redeclared on every render, so listing it here would re-run this effect on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.role]);
   usePolling(() => {

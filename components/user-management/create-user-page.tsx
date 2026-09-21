@@ -87,6 +87,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDi
       setFormError(null);
       setShowPassword(false);
     }
+    // Resets only when the dialog opens; re-running on session changes would wipe a half-filled form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

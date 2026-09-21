@@ -57,7 +57,7 @@ export function StaffSummaryCard({ counts = {} }: StaffSummaryCardProps) {
       <p className="text-xs font-bold tracking-wide text-primary uppercase">
         Staff Summary
       </p>
-      <div className="mt-3 min-h-0 flex-1 -mx-5 overflow-y-auto border-t border-border">
+      <div role="region" aria-label="Staff summary" tabIndex={0} className="mt-3 min-h-0 flex-1 -mx-5 overflow-y-auto border-t border-border">
         {roles.map((role, index) => {
           const count = counts[role] ?? 0;
           return (

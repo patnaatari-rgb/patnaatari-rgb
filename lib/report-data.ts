@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { MONTH_NAMES } from "@/lib/months";
+import { modelDelegate, type DynamicRow } from "@/lib/prisma-delegate";
 import { NF_COMPARISON_PARAMETERS, applyListFilter } from "./report-types";
 import { parseResultTables } from "./oft-result-tables";
 
@@ -57,7 +59,7 @@ function stringifyValue(v: unknown): string {
  * declaration order in the schema, which is itself the order the client's
  * real report tends to follow for these same fields.
  */
-const MODEL_FIELDS: Record<string, string[]> = {
+export const MODEL_FIELDS: Record<string, string[]> = {
   kvk: ["name", "address", "officePhone", "fax", "email", "sanctionYear"],
   bankAccount: ["accountType", "accountName", "bankName", "location", "accountNumber"],
   staff: ["sanctionedPost", "name", "dateOfBirth", "discipline", "payBand", "payScale", "dateOfJoining", "category", "jobType", "position", "mobile", "email", "allowances", "transferStatus"],
@@ -188,7 +190,7 @@ const MODEL_FIELDS: Record<string, string[]> = {
  * for a multi-year span). Year wins over `MODEL_PERIOD_DATE_FIELDS` because
  * it is the client's own explicit "annual reporting" key.
  */
-const MODEL_PERIOD_YEAR_FIELD: Record<string, string> = {
+export const MODEL_PERIOD_YEAR_FIELD: Record<string, string> = {
   target: "reportingYear",
   vehicleStatus: "reportingYear",
   equipmentStatus: "reportingYear",
@@ -221,7 +223,7 @@ const MODEL_PERIOD_YEAR_FIELD: Record<string, string> = {
  * them). Where a model has both a start and an end date the bound matches on
  * either (`OR`), same as the list toolbar's From/To behaviour.
  */
-const MODEL_PERIOD_DATE_FIELDS: Record<string, string[]> = {
+export const MODEL_PERIOD_DATE_FIELDS: Record<string, string[]> = {
   staffTransfer: ["transferDate"],
   /** Not a real model: the 1.2.C "Staff Retired" table reads Staff rows, bounded by their date of retirement (Staff itself is a roster table with no period bound). */
   staffRetired: ["dateOfRetirement"],
@@ -393,8 +395,7 @@ async function computeDistinctReportingYears(scope: {
 
   await Promise.all([
     ...yearFieldModels.map(async ([model, field]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const delegate = (prisma as any)[model];
+      const delegate = modelDelegate(model);
       if (!delegate?.findMany) return;
       const rows: Record<string, number | null>[] = await delegate.findMany({
         where: kvkOrZoneWhere(model, scope),
@@ -407,8 +408,7 @@ async function computeDistinctReportingYears(scope: {
       }
     }),
     ...dateFieldModels.map(async ([model, fields]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const delegate = (prisma as any)[model];
+      const delegate = modelDelegate(model);
       if (!delegate?.findMany) return;
       const select: Record<string, boolean> = {};
       for (const f of fields) select[f] = true;
@@ -1261,8 +1261,7 @@ function buildAwardCountByPerson(
   personLabel: string,
 ) {
   return async (scope: ReportScope): Promise<CustomTableResult> => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows: Record<string, any>[] = await (prisma as any)[model].findMany({
+    const rows: DynamicRow[] = await modelDelegate(model).findMany({
       where: scopeAndPeriod(scope, model),
       include: { kvk: { select: { name: true } } },
       orderBy: { kvk: { name: "asc" } },
@@ -3103,8 +3102,7 @@ function buildNariKvk(
 ) {
   return async (scope: ReportScope): Promise<CustomTableResult> => {
     const kvkId = scope.kvkId as string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawRecords: Record<string, any>[] = await (prisma as any)[model].findMany({
+    const rawRecords: DynamicRow[] = await modelDelegate(model).findMany({
       where: { kvkId },
       include: { kvk: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
@@ -3234,8 +3232,7 @@ function buildNariByActivity(
   const kvkVariant = buildNariKvk(model);
   return async (scope: ReportScope) => {
     if (scope.kvkId) return kvkVariant(scope);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const delegate = (prisma as any)[model];
+    const delegate = modelDelegate(model);
     const rows: { activity: string; count: number; male: number; female: number; kvk: { state: { name: string } } }[] =
       await delegate.findMany({
         where: scopeAndPeriod(scope, model),
@@ -3324,8 +3321,7 @@ function kvkOwnedTable(
   opts: { kvkLabel?: string; totalField?: string; totalLabel?: string; where?: Record<string, unknown> } = {},
 ) {
   return async (scope: ReportScope): Promise<CustomTableResult> => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const records: Record<string, any>[] = await (prisma as any)[model].findMany({
+    const records: DynamicRow[] = await modelDelegate(model).findMany({
       where: { ...scopeAndPeriod(scope, model), ...opts.where },
       include: { kvk: { select: { name: true } } },
       orderBy: { kvk: { name: "asc" } },
@@ -3468,11 +3464,6 @@ async function buildStaffRetired(scope: ReportScope): Promise<CustomTableResult>
   }));
   return { columns, rows };
 }
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 /**
  * 1.3.C "Staff Quarters Details" - super-v2-prod.pdf repeats, per KVK, a
@@ -3730,8 +3721,7 @@ function flatReportTable(spec: FlatSpec) {
     const activeNoSerial = singleKvk && spec.kvkColumns ? spec.kvkNoSerial : spec.noSerial;
     const lead = spec.lead ?? [];
     const needKvk = lead.length > 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const records: Record<string, any>[] = await (prisma as any)[spec.model].findMany({
+    const records: DynamicRow[] = await modelDelegate(spec.model).findMany({
       where: scopeAndPeriod(scope, spec.model),
       ...(needKvk
         ? { include: { kvk: { select: { name: true, state: { select: { name: true } }, district: { select: { name: true } } } } } }
@@ -4646,8 +4636,7 @@ async function buildNicraPiCoPi(scope: ReportScope): Promise<CustomTableResult> 
  */
 function buildProjectTeam(modelKey: string) {
   return async (scope: ReportScope): Promise<CustomTableResult> => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const delegate = (prisma as any)[modelKey];
+    const delegate = modelDelegate(modelKey);
     const rawRecords: { startDate: Date; endDate: Date; projectTeam: string; name: string; kvk: { name: string } }[] =
       await delegate.findMany({
         where: scopeAndPeriod(scope, modelKey),
@@ -4760,8 +4749,7 @@ function buildNicraStatePivot(model: "nicraTraining" | "nicraExtensionActivity",
       };
     }
     const [records, stateNames] = await Promise.all([
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (prisma as any)[model].findMany({
+      modelDelegate(model).findMany({
         where: { zoneId: scope.zoneId },
         select: { ...CASTE_SELECT, kvk: { select: { state: { select: { name: true } } } } },
       }) as Promise<(CasteRecord & { kvk: { state: { name: string } } })[]>,
@@ -7143,8 +7131,7 @@ async function fetchTable(entry: Entry, scope: ReportScope): Promise<ReportTable
   const fields = MODEL_FIELDS[entry.model] ?? [];
   const columns: ReportColumn[] = fields.map((key) => ({ key, label: humanize(key) }));
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const delegate = (prisma as any)[entry.model];
+    const delegate = modelDelegate(entry.model);
     const rawRows: Record<string, unknown>[] = await delegate.findMany({
       where: whereFor(entry, scope),
       select: Object.fromEntries(fields.map((f) => [f, true])),

@@ -9,6 +9,7 @@ import {
   type SummarySection,
 } from "./technical-achievement-summary";
 import { buildHeaderMatrix, type ReportColumn } from "./report-types";
+import { lastTableBottom } from "./pdf-autotable";
 
 const TITLE = "Technical Achievement Summary";
 const GREEN: [number, number, number] = [40, 108, 74];
@@ -21,7 +22,6 @@ const CARD_ACCENTS: Record<string, { bar: [number, number, number]; head: [numbe
   "seed-planting": { bar: [139, 92, 246], head: [245, 243, 255], hex: "8B5CF6", headHex: "F5F3FF" },
   "livestock-soil": { bar: [245, 158, 11], head: [255, 251, 235], hex: "F59E0B", headHex: "FFFBEB" },
 };
-const PUBLICATIONS_ACCENT = { bar: [244, 63, 94] as [number, number, number], head: [255, 241, 242] as [number, number, number], hex: "F43F5E", headHex: "FFF1F2" };
 
 export type TechnicalAchievementExportMeta = {
   reportingYear: string;
@@ -156,8 +156,7 @@ export async function downloadTechnicalAchievementPdf(
       styles: { minCellHeight: 1.5, cellPadding: 0, fillColor: accent.bar, lineWidth: 0 },
       didDrawPage: () => drawPageBorder(),
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cursorY = (doc as any).lastAutoTable.finalY;
+    cursorY = lastTableBottom(doc);
 
     autoTable(doc, {
       startY: cursorY,
@@ -169,8 +168,7 @@ export async function downloadTechnicalAchievementPdf(
       headStyles: { lineColor: BORDER_GRAY, lineWidth: 0.15, fontSize: 7 },
       didDrawPage: () => drawPageBorder(),
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cursorY = (doc as any).lastAutoTable.finalY + 8;
+    cursorY = lastTableBottom(doc) + 8;
   }
 
   if (cursorY > pageH - 20) {

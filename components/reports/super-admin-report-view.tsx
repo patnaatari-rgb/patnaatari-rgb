@@ -222,10 +222,11 @@ export function SuperAdminReportView() {
 
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <div>
-            <label className="text-xs font-medium text-muted-foreground">
+            <label htmlFor="report-zone" className="text-xs font-medium text-muted-foreground">
               Zone
             </label>
             <SimpleSelect
+              id="report-zone"
               value={zone}
               onValueChange={onZoneChange}
               options={REPORT_ZONE_OPTIONS.map((z) => ({ value: z, label: z }))}
@@ -306,10 +307,11 @@ export function SuperAdminReportView() {
           </div>
           <div className="mt-1.5 flex flex-wrap items-end gap-4">
             <div className="w-40 shrink-0">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="report-from-date" className="text-xs font-medium text-muted-foreground">
                 From Date
               </label>
               <Input
+                id="report-from-date"
                 type="date"
                 value={fromDate}
                 onChange={(e) => onDateInput(setFromDate, e.target.value)}
@@ -317,10 +319,11 @@ export function SuperAdminReportView() {
               />
             </div>
             <div className="w-40 shrink-0">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="report-to-date" className="text-xs font-medium text-muted-foreground">
                 To Date
               </label>
               <Input
+                id="report-to-date"
                 type="date"
                 value={toDate}
                 min={fromDate || undefined}

@@ -67,7 +67,7 @@ export function RecentLogHistoryCard() {
           View all
         </Link>
       </div>
-      <div className="mt-3 min-h-0 flex-1 -mx-5 overflow-auto border-t border-border">
+      <div role="region" aria-label="Recent log history" tabIndex={0} className="mt-3 min-h-0 flex-1 -mx-5 overflow-auto border-t border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="divide-x divide-border border-b border-border bg-muted/50 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">

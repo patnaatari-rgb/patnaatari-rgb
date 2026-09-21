@@ -156,10 +156,11 @@ export default function TargetsPage() {
           className={`grid gap-3 ${isKvk ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}
         >
           <div>
-            <label className="text-xs font-medium text-muted-foreground">
+            <label htmlFor="targets-reporting-year" className="text-xs font-medium text-muted-foreground">
               Reporting Year
             </label>
             <SimpleSelect
+              id="targets-reporting-year"
               value={reportingYear}
               onValueChange={setReportingYear}
               options={years.map((year) => ({ value: year, label: year }))}
@@ -179,10 +180,11 @@ export default function TargetsPage() {
             </div>
           )}
           <div>
-            <label className="text-xs font-medium text-muted-foreground">
+            <label htmlFor="targets-category" className="text-xs font-medium text-muted-foreground">
               Category
             </label>
             <SimpleSelect
+              id="targets-category"
               value={category}
               onValueChange={setCategory}
               options={CATEGORIES.map((c) => ({ value: c, label: c }))}

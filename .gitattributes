@@ -1,0 +1,3 @@
+# Normalise line endings in the repository regardless of each developer's
+# OS / core.autocrlf setting.
+* text=auto

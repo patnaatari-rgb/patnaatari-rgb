@@ -1,6 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { REPORT_FORM_LEAVES } from "@/lib/reports";
+import { DEMOGRAPHIC_KEYS } from "@/lib/navigation";
 
 export type RecordContext = { kvkId: string; zoneId: string };
 /** Update/delete run for both a KVK Admin (own records only) and a Super Admin (any KVK's records - Super Admin has no kvkId of its own). */
@@ -214,10 +216,9 @@ function parseTechnologyOptions(raw: string | undefined): { label: string; descr
 }
 
 /** Assembles the General/OBC/SC/ST x Male/Female breakdown from the 8 flat AddLeafPage fields into the farmersByCategory JSON shape (same convention as CfldTechnicalParameter) - undefined when every value is blank, so a record with no demographic data entered doesn't store an empty object. */
-const demographicKeys = ["generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"] as const;
 function farmersByCategory(v: Record<string, string>) {
-  if (!demographicKeys.some((k) => v[k]?.trim())) return undefined;
-  return Object.fromEntries(demographicKeys.map((k) => [k, String(int(v[k]) ?? 0)]));
+  if (!DEMOGRAPHIC_KEYS.some((k) => v[k]?.trim())) return undefined;
+  return Object.fromEntries(DEMOGRAPHIC_KEYS.map((k) => [k, String(int(v[k]) ?? 0)]));
 }
 
 /** DRMR Activity Item/Activity dropdown label -> the stable `DrmrActivityItem.itemKey` report 3.10.B renders by. */
@@ -268,7 +269,7 @@ function quarterlyCompletion(raw: string | undefined) {
  */
 function demographicColumns(v: Record<string, string>, prefix = "") {
   return Object.fromEntries(
-    demographicKeys.map((k) => {
+    DEMOGRAPHIC_KEYS.map((k) => {
       const key = prefix ? `${prefix}${k[0].toUpperCase()}${k.slice(1)}` : k;
       return [key, reqInt(v[key])];
     }),
@@ -277,7 +278,7 @@ function demographicColumns(v: Record<string, string>, prefix = "") {
 
 /** Sum across all 8 General/OBC/SC/ST x Male/Female breakdown keys - the stored value of a leaf's own farmers/participants count wherever the form has no separate input for it: either a leaf with no total field at all (e.g. PPV & FRA Training Programme's "No. of Participants"), or one whose count is auto-filled from the grid (navigation.ts BENEFICIARY_TOTAL). Always recomputed here, never read from the client. */
 function demographicTotal(v: Record<string, string>, prefix = "") {
-  return demographicKeys.reduce((sum, k) => {
+  return DEMOGRAPHIC_KEYS.reduce((sum, k) => {
     const key = prefix ? `${prefix}${k[0].toUpperCase()}${k.slice(1)}` : k;
     return sum + (int(v[key]) ?? 0);
   }, 0);
@@ -1580,6 +1581,24 @@ export const LEAF_RECORD_REGISTRY: Record<string, CreateFn> = {
 type DeleteFn = (id: string, ctx: ScopedContext) => Promise<{ count: number }>;
 
 /**
+ * Deletes a record together with its own Module Images. Ownership is checked
+ * first and the images are only touched once the record is confirmed to
+ * belong to the caller - clearing them up front let a KVK wipe another KVK's
+ * photos by sending that record's id, even though the record delete itself
+ * then came back "not found". The images and the record go in one
+ * transaction so neither can be left behind without the other.
+ */
+async function deleteWithModuleImages(
+  id: string,
+  owned: () => Promise<unknown>,
+  remove: () => Prisma.PrismaPromise<{ count: number }>,
+): Promise<{ count: number }> {
+  if (!(await owned())) return { count: 0 };
+  const [, deleted] = await prisma.$transaction([prisma.moduleImage.deleteMany({ where: { formRecordId: id } }), remove()]);
+  return deleted;
+}
+
+/**
  * One entry per LEAF_RECORD_REGISTRY key - deletes are scoped to the
  * signed-in KVK Admin's own kvkId, so `count` comes back 0 (treated as
  * not-found/not-authorized by the route, not silently ignored) for any id
@@ -1613,24 +1632,32 @@ export const LEAF_DELETE_REGISTRY: Record<string, DeleteFn> = {
   },
 
   /** Also clears this record's own Module Images (formRecordId) - otherwise deleting the record would leave orphaned photos behind, contradicting the real "images added/removed should reflect automatically" rule. */
-  "achievements/oft": async (id, ctx) => {
-    await prisma.moduleImage.deleteMany({ where: { formRecordId: id } });
-    return prisma.oft.deleteMany({ where: { id, ...kvkScope(ctx) } });
-  },
-  "achievements/front-line-demonstration/view-fld": async (id, ctx) => {
-    await prisma.moduleImage.deleteMany({ where: { formRecordId: id } });
-    return prisma.fld.deleteMany({ where: { id, ...kvkScope(ctx) } });
-  },
+  "achievements/oft": (id, ctx) =>
+    deleteWithModuleImages(
+      id,
+      () => prisma.oft.findFirst({ where: { id, ...kvkScope(ctx) }, select: { id: true } }),
+      () => prisma.oft.deleteMany({ where: { id, ...kvkScope(ctx) } }),
+    ),
+  "achievements/front-line-demonstration/view-fld": (id, ctx) =>
+    deleteWithModuleImages(
+      id,
+      () => prisma.fld.findFirst({ where: { id, ...kvkScope(ctx) }, select: { id: true } }),
+      () => prisma.fld.deleteMany({ where: { id, ...kvkScope(ctx) } }),
+    ),
   "achievements/front-line-demonstration/fld-extension-training": (id, ctx) => prisma.fldExtensionTraining.deleteMany({ where: { id, fld: { ...kvkScope(ctx) } } }),
   "achievements/front-line-demonstration/fld-technical-feedback": (id, ctx) => prisma.fldTechnicalFeedback.deleteMany({ where: { id, fld: { ...kvkScope(ctx) } } }),
-  "achievements/trainings": async (id, ctx) => {
-    await prisma.moduleImage.deleteMany({ where: { formRecordId: id } });
-    return prisma.training.deleteMany({ where: { id, ...kvkScope(ctx) } });
-  },
-  "achievements/extension/extension-activities": async (id, ctx) => {
-    await prisma.moduleImage.deleteMany({ where: { formRecordId: id } });
-    return prisma.extensionActivity.deleteMany({ where: { id, ...kvkScope(ctx) } });
-  },
+  "achievements/trainings": (id, ctx) =>
+    deleteWithModuleImages(
+      id,
+      () => prisma.training.findFirst({ where: { id, ...kvkScope(ctx) }, select: { id: true } }),
+      () => prisma.training.deleteMany({ where: { id, ...kvkScope(ctx) } }),
+    ),
+  "achievements/extension/extension-activities": (id, ctx) =>
+    deleteWithModuleImages(
+      id,
+      () => prisma.extensionActivity.findFirst({ where: { id, ...kvkScope(ctx) }, select: { id: true } }),
+      () => prisma.extensionActivity.deleteMany({ where: { id, ...kvkScope(ctx) } }),
+    ),
   "achievements/extension/other-extension-activities": (id, ctx) => prisma.otherExtensionActivity.deleteMany({ where: { id, ...kvkScope(ctx) } }),
   "achievements/special-days/celebration-days": (id, ctx) => prisma.celebrationDay.deleteMany({ where: { id, ...kvkScope(ctx) } }),
   "achievements/swachhta-bharat-abhiyaan/sewa": (id, ctx) => prisma.swachhtaObservance.deleteMany({ where: { id, ...kvkScope(ctx), kind: "SEWA" } }),

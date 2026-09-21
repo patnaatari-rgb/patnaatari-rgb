@@ -94,6 +94,7 @@ function ReportPreviewContent() {
     return () => {
       cancelled = true;
     };
+    // Loads once when the preview opens. The loader helpers above are redeclared on every render, so listing them would re-run the load each time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

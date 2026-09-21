@@ -65,6 +65,7 @@ export function ModuleImageCard({
             <DropdownMenuTrigger
               render={
                 <Button
+                  aria-label="Image actions"
                   variant="ghost"
                   size="icon-sm"
                   className="bg-white/90 shadow-sm hover:bg-white"

@@ -298,7 +298,7 @@ export function RoleManagementView() {
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
-                          <Button variant="ghost" size="icon-sm">
+                          <Button aria-label="Role actions" variant="ghost" size="icon-sm">
                             <MoreVertical className="size-4" />
                           </Button>
                         }

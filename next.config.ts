@@ -18,11 +18,19 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Do not advertise the framework in an X-Powered-By header on every response.
+  poweredByHeader: false,
   async headers() {
     return [
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        // Every API response is per-user data; keep it out of any shared or browser cache.
+        // /api/files/view is left alone: it sets its own private, cacheable header so photos are not re-downloaded on every view.
+        source: "/api/:path((?!files/view).*)",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
     ];
   },

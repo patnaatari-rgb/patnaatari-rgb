@@ -13,6 +13,7 @@
  */
 
 import { INSTITUTE_MASTER_ROWS } from "./masters";
+import { MONTH_NAMES } from "./months";
 
 export type MasterColumn = {
   key: string;
@@ -274,11 +275,8 @@ const BENEFICIARY_TOTAL: Partial<MasterColumn> = {
 /** Role choices for the "Project Team" dropdown, shared by every Project section's Team leaf so they can never drift apart (client direction, 2026-09-21: PI and Co-PI added alongside the existing roles). */
 const PROJECT_TEAM_ROLES = ["PI", "Co-PI", "Nodal Officer", "Associate Member"];
 
-/** Calendar-order month choices for every "Month" field, so a month is picked instead of typed (client direction, 2026-09-21). Same full names the Staff Quarters and CFLD Technical Parameter forms already use. */
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+/** Calendar-order month choices for every "Month" field, so a month is picked instead of typed (client direction, 2026-09-21). */
+const MONTH_OPTIONS: string[] = [...MONTH_NAMES];
 
 function leaf(
   slug: string,
@@ -1630,7 +1628,7 @@ const achievements = group("achievements", "Achievements", [
     leaf("poshan-maaha", "Poshan Maaha", [
       { key: "kvk", label: "KVK", readonly: true },
       { key: "activityDate", label: "Activity Date", formLabel: "Datewise activity (date)", fieldKind: "date", formOrder: 1 },
-      { key: "activitiesConducted", label: "Activities Conducted", formLabel: "No. of activities conducted", formOrder: 3 },
+      { key: "activitiesConducted", label: "Activities Conducted", formLabel: "No. of activities conducted", formOrder: 3, numeric: false },
       { key: "eventName", label: "Event Name", formLabel: "Name of Event/Programme", formOrder: 2 },
       { key: "saplingsPlanted", label: "Saplings Planted", formLabel: "No. of saplings planted", formOrder: 4 },
       { key: "vegetableKits", label: "Vegetable Kits", formLabel: "No. of vegetable kits distributed", formOrder: 5 },
@@ -1769,6 +1767,7 @@ const achievements = group("achievements", "Achievements", [
           key: "vermicompostingVillagesCovered",
           label: "Vermicomposting No of Village Covered",
           formLabel: "No of village covered",
+          numeric: true,
         },
         {
           key: "vermicompostingTotalExpenditure",
@@ -1922,8 +1921,8 @@ const achievements = group("achievements", "Achievements", [
     { key: "journalName", label: "Name Of Publisher", required: true },
     /** Report 2.10.A prints item-type-specific columns - Publisher Name + ISBN for book chapters, Page Number + NAAS Rating for research papers (added 2026-09-03). */
     { key: "publisherName", label: "Publisher Name" },
-    { key: "isbnNumber", label: "ISBN Number" },
-    { key: "pageNumber", label: "Page Number" },
+    { key: "isbnNumber", label: "ISBN Number", numeric: false },
+    { key: "pageNumber", label: "Page Number", numeric: false },
     { key: "naasRating", label: "NAAS Rating" },
   ]),
   /** 6 real columns confirmed 2026-08-22. Real H1 is hyphenated and singular; the landing card uses the longer plural form. */
@@ -1965,7 +1964,7 @@ const achievements = group("achievements", "Achievements", [
         { key: "reportingDate", label: "Reporting Date", formOnly: true, fieldKind: "date", required: true },
         { key: "award", label: "Award", formLabel: "Name of the Award", required: true },
         { key: "amount", label: "Amount", required: true },
-        { key: "achievement", label: "Achievement", required: true },
+        { key: "achievement", label: "Achievement", required: true, numeric: false },
         { key: "conferringAuthority", label: "Conferring Authority", required: true },
       ],
       "KVK",
@@ -1979,7 +1978,7 @@ const achievements = group("achievements", "Achievements", [
       { key: "headScientist", label: "Scientist", formLabel: "Head/Scientist", sourceMaster: { master: "__staff_sms_head__", optionKey: "name" }, required: true },
       { key: "award", label: "Award", formLabel: "Name of the Award", required: true },
       { key: "amount", label: "Amount", required: true },
-      { key: "achievement", label: "Achievement", required: true },
+      { key: "achievement", label: "Achievement", required: true, numeric: false },
       { key: "conferringAuthority", label: "Conferring Authority", required: true },
     ]),
     /** Edit form field order re-confirmed against the reference (atari-client.vercel.app, 2026-09-02 client handover zip): Reporting Date, Name of the Award | Name of the Farmer, Address | Contact No., Amount | Achievement, Conferring Authority. */
@@ -1993,7 +1992,7 @@ const achievements = group("achievements", "Achievements", [
       { key: "contactNumber", label: "Contact No.", formOrder: 5, required: true },
       { key: "award", label: "Award", formLabel: "Name of the Award", formOrder: 2, required: true },
       { key: "amount", label: "Amount", formOrder: 6, required: true },
-      { key: "achievement", label: "Achievement", formOrder: 7, required: true },
+      { key: "achievement", label: "Achievement", formOrder: 7, required: true, numeric: false },
       { key: "conferringAuthority", label: "Conferring Authority", formOrder: 8, required: true },
       /** Real field, confirmed missing entirely before (atari-client.vercel.app, 2026-09-02) - a real multi-file upload ("Hold Ctrl/Cmd in the file picker to select multiple"), not single. */
       { key: "moduleImages", label: "Photographs", fieldKind: "photos", formOnly: true },
@@ -2145,17 +2144,17 @@ const projects = group(
     group("nicra", "NICRA (Technology Demonstration component)", [
       leaf("basic-information", "Basic Information", [
         { key: "kvk", label: "KVK", readonly: true },
-        { key: "rfDistrictNormal", label: "District Normal Rainfall (mm)", required: true },
-        { key: "rfDistrictReceived", label: "District Received Rainfall (mm)", required: true },
+        { key: "rfDistrictNormal", label: "District Normal Rainfall (mm)", required: true, numeric: true },
+        { key: "rfDistrictReceived", label: "District Received Rainfall (mm)", required: true, numeric: true },
         { key: "maxTemperature", label: "Max. Temperature (°C)", required: true },
         { key: "minTemperature", label: "Min. Temperature (°C)", required: true },
         /** Report 3.2.A "Basic Information" columns - dry spell / drought bands, NICRA-adopted-village count, flood averages (added 2026-09-03). */
         { key: "drySpell10Days", label: "Dry spell > 10 days" },
         { key: "drySpell15Days", label: "Dry spell > 15 days" },
         { key: "drySpell20Days", label: "Dry spell > 20 days" },
-        { key: "nicraAdoptedVillages", label: "NICRA Adopted village" },
-        { key: "floodIntensiveRainMm", label: "Flood - Intensive rain > 60 mm" },
-        { key: "floodWaterDepthCm", label: "Flood - Water depth (cm)" },
+        { key: "nicraAdoptedVillages", label: "NICRA Adopted village", numeric: true },
+        { key: "floodIntensiveRainMm", label: "Flood - Intensive rain > 60 mm", numeric: true },
+        { key: "floodWaterDepthCm", label: "Flood - Water depth (cm)", numeric: true },
         { key: "floodDurationDays", label: "Flood - Duration (days)" },
         /** KVK report 3.2.A "Period" trio (added 2026-09-03). */
         { key: "reportingDate", label: "Reporting Date", fieldKind: "date" },
@@ -2174,11 +2173,11 @@ const projects = group(
         { key: "areaOrUnit", label: "Area/Unit", numeric: false },
         { key: "netReturn", label: "Net return" },
         /** KVK report 3.2.B per-record detail columns (added 2026-09-03). */
-        { key: "month", label: "Month", staticOptions: MONTH_NAMES },
+        { key: "month", label: "Month", staticOptions: MONTH_OPTIONS },
         { key: "yield", label: "Yield" },
         { key: "grossCost", label: "Gross cost" },
         { key: "grossReturn", label: "Gross return" },
-        { key: "bcr", label: "BCR" },
+        { key: "bcr", label: "BCR", numeric: true },
         ...DEMOGRAPHIC_COLUMNS,
       ]),
       leaf("training", "Training", [
@@ -2335,11 +2334,11 @@ const projects = group(
         { key: "unitsEstablished", label: "No. of entrepreneurial units established (Progressive)", formLabel: "Units Established (Progressive)" },
         { key: "ruralYouthMale", label: "Rural youth trained - Male" },
         { key: "ruralYouthFemale", label: "Rural youth trained - Female" },
-        { key: "avgUnitSize", label: "Average size of each entrepreneurial unit" },
-        { key: "productionPerUnit", label: "Total Production/unit/year" },
-        { key: "costPerUnit", label: "Per unit cost of Production" },
+        { key: "avgUnitSize", label: "Average size of each entrepreneurial unit", numeric: true },
+        { key: "productionPerUnit", label: "Total Production/unit/year", numeric: true },
+        { key: "costPerUnit", label: "Per unit cost of Production", numeric: true },
         { key: "saleValue", label: "Sale value of produce" },
-        { key: "economicGainsPerUnit", label: "Economic Gains / unit" },
+        { key: "economicGainsPerUnit", label: "Economic Gains / unit", numeric: true },
         { key: "employmentMandaysMale", label: "Employment generated (mandays) - Male" },
         { key: "employmentMandaysFemale", label: "Employment generated (mandays) - Female" },
       ]),
@@ -2352,19 +2351,19 @@ const projects = group(
         { key: "restartedDate", label: "Restarted date", fieldKind: "date", required: true },
         /** Report 3.4.B "Previous Year Evaluation" ~17-column grid (added 2026-09-03). */
         { key: "unitsEstablishedProgressive", label: "No. of entrepreneurial units established (up to previous year progressive)", formLabel: "Units Established (Prev. Yr. Progressive)" },
-        { key: "sizeMale", label: "Unit Size - Male" },
-        { key: "sizeFemale", label: "Unit Size - Female" },
-        { key: "sizeNoOfUnit", label: "Unit Size - No. of Unit" },
-        { key: "sizeUnitCapacity", label: "Unit Size - Unit capacity" },
+        { key: "sizeMale", label: "Unit Size - Male", numeric: true },
+        { key: "sizeFemale", label: "Unit Size - Female", numeric: true },
+        { key: "sizeNoOfUnit", label: "Unit Size - No. of Unit", numeric: true },
+        { key: "sizeUnitCapacity", label: "Unit Size - Unit capacity", numeric: true },
         { key: "costFixed", label: "Establishment Cost - Fixed cost" },
         { key: "costVariable", label: "Establishment Cost - Variable cost" },
-        { key: "totalProductionPerUnitYear", label: "Total production/unit/year" },
-        { key: "grossCostPerUnitYear", label: "Gross cost of production/unit/year" },
-        { key: "grossReturnPerUnitYear", label: "Gross return per unit/year" },
-        { key: "netBenefitPerUnitYear", label: "Net benefit / unit/year" },
+        { key: "totalProductionPerUnitYear", label: "Total production/unit/year", numeric: true },
+        { key: "grossCostPerUnitYear", label: "Gross cost of production/unit/year", numeric: true },
+        { key: "grossReturnPerUnitYear", label: "Gross return per unit/year", numeric: true },
+        { key: "netBenefitPerUnitYear", label: "Net benefit / unit/year", numeric: true },
         { key: "employmentFamily", label: "Employment generated/year - Family" },
-        { key: "employmentOtherThanFamily", label: "Employment generated/year - Other than Family", formLabel: "Employment Generated/Year - Other" },
-        { key: "personsVisited", label: "No. of persons visited entrepreneur unit" },
+        { key: "employmentOtherThanFamily", label: "Employment generated/year - Other than Family", formLabel: "Employment Generated/Year - Other", numeric: true },
+        { key: "personsVisited", label: "No. of persons visited entrepreneur unit", numeric: true },
       ]),
       /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
       leaf("arya-team", "Team", [
@@ -2434,7 +2433,7 @@ const projects = group(
           { key: "kvk", label: "KVK Name", readonly: true },
           { key: "farmerName", label: "Farmer Name", required: true },
           { key: "address", label: "Address", required: true },
-          { key: "normalCropsGrown", label: "Normal crops grown", required: true },
+          { key: "normalCropsGrown", label: "Normal crops grown", required: true, numeric: false },
           {
             key: "practicingYear",
             label: "Practicing year of natural farming",
@@ -2452,8 +2451,8 @@ const projects = group(
       ),
       leaf("nf-beneficiaries", "Details of Beneficiaries", [
         { key: "kvk", label: "KVK Name", readonly: true },
-        { key: "numberOfBlock", label: "Number of block", required: true },
-        { key: "numberOfVillage", label: "Number of village", required: true },
+        { key: "numberOfBlock", label: "Number of block", required: true, numeric: true },
+        { key: "numberOfVillage", label: "Number of village", required: true, numeric: true },
         { key: "numberOfTraining", label: "Number of training", required: true },
         {
           key: "farmersInfluenced",
@@ -2463,8 +2462,8 @@ const projects = group(
         },
         /** Report 3.5.E "Beneficiaries" columns - reporting year, all/one-season engaged farmers, remark (added 2026-09-03). */
         { key: "reportingYear", label: "Reporting year" },
-        { key: "farmersEngagedAllSeason", label: "No. of farmers engaged all season" },
-        { key: "farmersEngagedOneSeason", label: "No. of farmers engaged in 1 season" },
+        { key: "farmersEngagedAllSeason", label: "No. of farmers engaged all season", numeric: true },
+        { key: "farmersEngagedOneSeason", label: "No. of farmers engaged in 1 season", numeric: true },
         { key: "remarks", label: "Remarks" },
       ]),
       leaf("nf-soil-data", "Soil Data information", [
@@ -2472,21 +2471,21 @@ const projects = group(
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "type", label: "Soil Type", required: true },
         { key: "crop", label: "Crop", required: true },
-        { key: "beforePh", label: "Before pH", required: true },
-        { key: "beforeEc", label: "Before EC (dS/m)", required: true },
+        { key: "beforePh", label: "Before pH", required: true, numeric: true },
+        { key: "beforeEc", label: "Before EC (dS/m)", required: true, numeric: true },
         { key: "beforeEcOc", label: "Before EC OC (%)", required: true },
         /** Report 3.5.F "Soil Data" - N/P/K/Microbes for the before/after grids (added 2026-09-03). */
         { key: "beforeN", label: "Before N (Kg/ha)" },
         { key: "beforeP", label: "Before P (Kg/ha)" },
         { key: "beforeK", label: "Before K (Kg/ha)" },
-        { key: "beforeMicrobes", label: "Before Soil Microbes (cfu)" },
-        { key: "afterPh", label: "After pH", required: true },
-        { key: "afterEc", label: "After EC (dS/m)", required: true },
+        { key: "beforeMicrobes", label: "Before Soil Microbes (cfu)", numeric: true },
+        { key: "afterPh", label: "After pH", required: true, numeric: true },
+        { key: "afterEc", label: "After EC (dS/m)", required: true, numeric: true },
         { key: "afterEcOc", label: "After EC OC (%)", required: true },
         { key: "afterN", label: "After N (Kg/ha)" },
         { key: "afterP", label: "After P (Kg/ha)" },
         { key: "afterK", label: "After K (Kg/ha)" },
-        { key: "afterMicrobes", label: "After Soil Microbes (cfu)" },
+        { key: "afterMicrobes", label: "After Soil Microbes (cfu)", numeric: true },
       ]),
       leaf("nf-budget-expenditure", "Budget Expenditure", [
         { key: "kvk", label: "KVK Name", readonly: true },
@@ -2679,6 +2678,7 @@ const projects = group(
           key: "trainingReceived",
           label: "Training Received by FPO Members",
           required: true,
+          numeric: false,
         },
         {
           key: "businessPlanPrepared",
@@ -2697,6 +2697,7 @@ const projects = group(
           key: "noOfTrainingProgrammes",
           label: "No. of training programme organized for FPOs as CBBO",
           formLabel: "Training Programmes Organized (CBBO)",
+          numeric: true,
         },
         {
           key: "assistanceEconomicActivities",
@@ -2781,7 +2782,7 @@ const projects = group(
           formLabel: "FLDs and Other Demonstrations",
           required: true,
         },
-        { key: "awarenessCamps", label: "Awareness Camps", required: true },
+        { key: "awarenessCamps", label: "Awareness Camps", required: true, numeric: false },
         { key: "distributionOfLiterature", label: "Distribution of Literature", required: true },
         {
           key: "itemActivity",
@@ -2839,7 +2840,7 @@ const projects = group(
         { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
         { key: "endDate", label: "End Date", fieldKind: "date", required: true },
         { key: "withinOrWithoutState", label: "Within State/Without State", required: true },
-        { key: "exposureVisits", label: "Exposure Visit (No.)", required: true },
+        { key: "exposureVisits", label: "Exposure Visit (No.)", required: true, numeric: true },
         {
           key: "farmersUnderExposure",
           label: "Number of Farmers Under Exposure",
@@ -2864,10 +2865,10 @@ const projects = group(
         [
           { key: "kvk", label: "KVK Name", readonly: true },
           { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
-          { key: "villageCovered", label: "Village Covered(no.)", required: true },
-          { key: "blockCovered", label: "Block Covered(no.)", required: true },
-          { key: "districtCovered", label: "District Covered(no.)", required: true },
-          { key: "respondent", label: "Respondent" },
+          { key: "villageCovered", label: "Village Covered(no.)", required: true, numeric: true },
+          { key: "blockCovered", label: "Block Covered(no.)", required: true, numeric: true },
+          { key: "districtCovered", label: "District Covered(no.)", required: true, numeric: true },
+          { key: "respondent", label: "Respondent", numeric: true },
           /** Client pointer, 2026-09-15: label had a spelling error ("Trail Name") - fixed to "Trial Name". Column key stays `trailName` (matches the existing DB column/schema field of the same name; no schema change for a display-text fix). */
           { key: "trailName", label: "Trial Name" },
           { key: "areaCoveredHa", label: "Area Covered (ha)" },
@@ -2904,13 +2905,13 @@ const projects = group(
         { key: "areaHa", label: "Area (ha)", required: true },
         { key: "yieldHa", label: "Yield (ha)", required: true },
         { key: "qtySeedProducedQ", label: "Quantity of Seed Produced (Q)", required: true },
-        { key: "qtySeedSaleOutQ", label: "Quantity of Seed Sale Out (Q)", required: true },
+        { key: "qtySeedSaleOutQ", label: "Quantity of Seed Sale Out (Q)", required: true, numeric: true },
         { key: "farmersPurchased", label: "No. of Farmers Purchased Seed", required: true },
-        { key: "qtySeedSaleOutToFarmersQ", label: "Quantity Sale Out to Farmers (Q)", required: true },
+        { key: "qtySeedSaleOutToFarmersQ", label: "Quantity Sale Out to Farmers (Q)", required: true, numeric: true },
         { key: "villagesCovered", label: "No. of Villages Covered", required: true },
-        { key: "qtySeedSaleOutOtherOrgQ", label: "Quantity Sale Out to Other Org (Q)", required: true },
+        { key: "qtySeedSaleOutOtherOrgQ", label: "Quantity Sale Out to Other Org (Q)", required: true, numeric: true },
         { key: "amountGeneratedLakh", label: "Amount Generated (Lakh)", required: true },
-        { key: "totalAmountInProjectLakh", label: "Total Amount in Project (Lakh)", required: true },
+        { key: "totalAmountInProjectLakh", label: "Total Amount in Project (Lakh)", required: true, numeric: true },
       ]),
       /** Client direction, 2026-09-21: Team added to Seed Hub Program as well; same shape as ARYA's own Team. */
       leaf("seed-hub-team", "Team", [
@@ -3089,7 +3090,7 @@ const performanceIndicators = group(
       ]),
       leaf("district-monthly-weather", "Mean Yearly Temperature, Rainfall, Humidity", [
         { key: "kvk", label: "KVK", readonly: true },
-        { key: "month", label: "Month", required: true, staticOptions: MONTH_NAMES },
+        { key: "month", label: "Month", required: true, staticOptions: MONTH_OPTIONS },
         { key: "rainfallMm", label: "Rainfall (mm)" },
         { key: "maxTempC", label: "Max. Temp. (°C)", numeric: true },
         { key: "minTempC", label: "Min. Temp. (°C)", numeric: true },
@@ -3195,7 +3196,7 @@ const performanceIndicators = group(
         { key: "kvk", label: "KVK Name", readonly: true },
         // Real Add form field confirmed live (atariams.org/infra-performance/hostel-facility/create, 2026-09-03) - was missing entirely before, not a table column there.
         { key: "reportingYear", label: "Reporting Year", required: true, formOnly: true },
-        { key: "months", label: "Months", required: true, staticOptions: MONTH_NAMES },
+        { key: "months", label: "Months", required: true, staticOptions: MONTH_OPTIONS },
         { key: "traineesStayed", label: "No. of Trainees Stayed", required: true },
         { key: "traineeDays", label: "Trainee Days (Days Stayed)", required: true },
         // Real reference (2026-09-03) marks this required too, and it isn't a column on its own table (own table: KVK/Months/Trainees/Trainee Days only) - hidden from ours to match.
@@ -3366,6 +3367,7 @@ const meetings = group("meetings", "Meetings", [
         // rather than reproducing the reference's error.
         label: "Total Statutory Members Present (State Line Department)",
         formLabel: "Statutory Members Present (State Line Dept.)",
+        numeric: true,
       },
       { key: "recommendations", label: "Salient Recommendations" },
       { key: "actionTaken", label: "Action - Taken" },

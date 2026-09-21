@@ -1482,7 +1482,7 @@ export function EmptyDataTable({
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={
-                              <Button variant="ghost" size="icon-sm">
+                              <Button aria-label="Row actions" variant="ghost" size="icon-sm">
                                 <MoreVertical className="size-4" />
                               </Button>
                             }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
 import { getTrackedLeaves, yearsWhereFor } from "@/lib/form-summary-data";
+import { modelDelegate } from "@/lib/prisma-delegate";
 
 /**
  * Real per-KVK, per-form entry counts across every one of the app's ~108
@@ -61,8 +62,7 @@ export async function GET(request: Request) {
 
   const countsPerLeaf = await Promise.all(
     leaves.map(async (leaf) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const delegate = (prisma as any)[leaf.model];
+      const delegate = modelDelegate(leaf.model);
       const field = leaf.kvkField ?? "kvkId";
       const where: Record<string, unknown> = kvkId
         ? { [field]: kvkId }

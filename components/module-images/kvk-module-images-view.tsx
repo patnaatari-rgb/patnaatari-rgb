@@ -348,10 +348,11 @@ export function KvkModuleImagesView() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground">
+            <label htmlFor="module-images-from-date" className="text-xs font-medium text-muted-foreground">
               From Date
             </label>
             <Input
+              id="module-images-from-date"
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
@@ -359,10 +360,11 @@ export function KvkModuleImagesView() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground">
+            <label htmlFor="module-images-to-date" className="text-xs font-medium text-muted-foreground">
               To Date
             </label>
             <Input
+              id="module-images-to-date"
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}

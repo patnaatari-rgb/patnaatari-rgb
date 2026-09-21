@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import autoTable, { type CellHookData, type RowInput } from "jspdf-autotable";
+import { lastTableBottom } from "@/lib/pdf-autotable";
 import {
   buildHeaderMatrix,
   isRedundantTableHeading,
@@ -68,10 +69,8 @@ function reportRunningHeader(opts: ReportPdfOptions): string {
   return `ICAR-ATARI/${zoneSeg}/${kvkSeg}/REPORT-${periodSeg}`;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /** jspdf-autotable `head` from the shared N-row header matrix (super-v2-prod.pdf's pivots go up to ~6 levels). */
-function buildHead(columns: ReportColumn[], serial: boolean): any[] {
+function buildHead(columns: ReportColumn[], serial: boolean): RowInput[] {
   return buildHeaderMatrix(columns, serial ? "Sl. No." : undefined).map((row) =>
     row.map((cell) => ({
       content: cell.text,
@@ -120,7 +119,7 @@ function renderGrid(doc: jsPDF, grid: ReportGrid, startY: number): number {
   }
 
   const totalCols = (serial ? 1 : 0) + grid.columns.length;
-  const bands: any[] = (grid.titleBands ?? []).map((band, i) => [
+  const bands: RowInput[] = (grid.titleBands ?? []).map((band, i) => [
     {
       content: band,
       colSpan: totalCols,
@@ -128,7 +127,7 @@ function renderGrid(doc: jsPDF, grid: ReportGrid, startY: number): number {
     },
   ]);
   const head = [...bands, ...buildHead(grid.columns, serial)];
-  const body: any[] = grid.rows.map((row, i) => [
+  const body: RowInput[] = grid.rows.map((row, i) => [
     ...(serial ? [String(i + 1)] : []),
     ...grid.columns.map((c) => row[c.key] ?? ""),
   ]);
@@ -174,7 +173,7 @@ function renderGrid(doc: jsPDF, grid: ReportGrid, startY: number): number {
     styles: { ...GRID_STYLES, overflow: "linebreak", valign: "middle", minCellWidth: 6 },
     headStyles: { ...HEAD_STYLES, overflow: "linebreak", valign: "middle", halign: "center" },
     theme: "grid",
-    didParseCell: (data: any) => {
+    didParseCell: (data: CellHookData) => {
       if (data.section !== "body") return;
       // The dedicated `totalRow`.
       if (data.row.index === totalRowIndex) {
@@ -201,7 +200,7 @@ function renderGrid(doc: jsPDF, grid: ReportGrid, startY: number): number {
       }
     },
   });
-  return (doc as any).lastAutoTable.finalY + 6;
+  return lastTableBottom(doc) + 6;
 }
 
 /** Renders a numbered label/value list (the 18-point OFT detail layout) as a borderless two-column table, or, when `flow`, as wrapped "label value" lines (2.2.C "Result:" / "Remark:"). */
@@ -239,7 +238,7 @@ function renderPairs(
     styles: { ...GRID_STYLES, fontSize: 8, cellPadding: 1.4, overflow: "linebreak", valign: "middle" },
     theme: "grid",
   });
-  return (doc as any).lastAutoTable.finalY + 6;
+  return lastTableBottom(doc) + 6;
 }
 
 type TocLine = {
@@ -543,7 +542,7 @@ export function generateReportPdf(opts: ReportPdfOptions) {
           doc.rect(x, rowTop, cw, boxH);
           try {
             const fmt = /^data:image\/(png|jpe?g|webp)/i.exec(data)?.[1]?.toUpperCase().replace("JPG", "JPEG") ?? "JPEG";
-            const props = (doc as any).getImageProperties(data);
+            const props = doc.getImageProperties(data);
             const scale = Math.min((cw - 2) / props.width, (boxH - 2) / props.height);
             const iw = props.width * scale;
             const ih = props.height * scale;

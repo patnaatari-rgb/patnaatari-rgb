@@ -132,10 +132,11 @@ export default function LogHistoryPage() {
       {!isKvk && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground">
+            <label htmlFor="log-history-kvk" className="block text-xs font-medium text-muted-foreground">
               KVKs
             </label>
             <SimpleSelect
+              id="log-history-kvk"
               value={kvkFilter}
               onValueChange={setKvkFilter}
               options={[

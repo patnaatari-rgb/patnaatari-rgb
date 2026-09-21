@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePolling } from "@/lib/use-polling";
 import { MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -110,6 +110,9 @@ function currentScopeValue(user: UserRow, kind: ReturnType<typeof scopeFieldFor>
  * PATCH), since it's the same underlying action a real admin can already do
  * from Edit User - no separate backend needed for it.
  */
+/** 10 rows per page, matching the reference "View Users" table. */
+const PAGE_SIZE = 10;
+
 export function UserManagementView() {
   const session = useSession();
   const isSuperAdmin = session.role === "super-admin";
@@ -132,11 +135,8 @@ export function UserManagementView() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  /** 10 rows per page, matching the reference "View Users" table. */
-  const PAGE_SIZE = 10;
-
   /** `silent` skips the loading state - used for background polling refreshes so the table doesn't flash "Loading users..." over data that's already on screen. Search + pagination now happen server-side (see /api/users) so this only ever fetches the current page's 10 rows, not the whole scope every time. */
-  function loadUsers(silent = false) {
+  const loadUsers = useCallback((silent = false) => {
     if (!silent) setLoading(true);
     const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (debouncedSearch) params.set("search", debouncedSearch);
@@ -151,7 +151,7 @@ export function UserManagementView() {
         if (!silent) setListError("Could not load users.");
       })
       .finally(() => setLoading(false));
-  }
+  }, [page, debouncedSearch]);
 
   // Debounce the search box - waits 350ms after typing stops before it becomes the query actually sent to the server.
   useEffect(() => {
@@ -162,7 +162,9 @@ export function UserManagementView() {
     return () => clearTimeout(id);
   }, [search]);
 
-  useEffect(() => loadUsers(), [page, debouncedSearch]);
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
   usePolling(() => loadUsers(true));
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -322,7 +324,7 @@ export function UserManagementView() {
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       render={
-                        <Button variant="ghost" size="icon-sm">
+                        <Button variant="ghost" size="icon-sm" aria-label="User actions">
                           <MoreVertical className="size-4" />
                         </Button>
                       }

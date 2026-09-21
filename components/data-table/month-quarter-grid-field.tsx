@@ -2,11 +2,8 @@
 
 import { Label } from "@/components/ui/label";
 import { SimpleSelect } from "@/components/ui/simple-select";
+import { MONTH_NAMES } from "@/lib/months";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-] as const;
 const QUARTERS = ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4", "Quarter 5", "Quarter 6"] as const;
 
 export type MonthQuarterGridValue = Record<string, Record<string, string>>;
@@ -53,7 +50,7 @@ export function MonthQuarterGridField({
             </tr>
           </thead>
           <tbody>
-            {MONTHS.map((month) => (
+            {MONTH_NAMES.map((month) => (
               <tr key={month} className="divide-x divide-border border-b border-border last:border-0">
                 <td className="px-3 py-2 whitespace-nowrap text-foreground">{month}</td>
                 {QUARTERS.map((quarter) => {
