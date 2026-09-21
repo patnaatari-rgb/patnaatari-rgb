@@ -13,7 +13,8 @@ export type UploadKind =
   | "farmer-award-photo"
   | "success-story-image"
   | "rawe-attachment"
-  | "ppv-fra-farmer-image";
+  | "ppv-fra-farmer-image"
+  | "sac-meeting-file";
 
 const UPLOAD_RULES: Record<UploadKind, { folder: string; minBytes?: number; maxBytes: number; mimeTypes: string[] }> = {
   "staff-photo": {
@@ -118,6 +119,21 @@ const UPLOAD_RULES: Record<UploadKind, { folder: string; minBytes?: number; maxB
     folder: "miscellaneous/ppv-fra-farmer-images",
     maxBytes: 5 * 1024 * 1024,
     mimeTypes: ["image/jpeg", "image/png", "image/webp"],
+  },
+  /** SAC Meetings' "File/Proceeding" field (client pointer, 2026-09-15) - was a plain text input with nowhere to actually attach the meeting's file despite the column existing (SacMeeting.fileUrl). Same accepted types as rawe-attachment/oft-supplementary-datasheet (a scanned proceeding is as likely to be a PDF/Word doc as a photographed page). */
+  "sac-meeting-file": {
+    folder: "meetings/sac-meeting-files",
+    maxBytes: 5 * 1024 * 1024,
+    mimeTypes: [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
   },
 };
 

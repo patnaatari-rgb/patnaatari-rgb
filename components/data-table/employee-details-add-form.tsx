@@ -115,7 +115,7 @@ export function EmployeeDetailsAddForm({ trail, backHref, id }: EmployeeDetailsF
   }, [id]);
 
   async function submit() {
-    if (!sanctionedPost || !name || !position.trim() || !mobile || !discipline || !dateOfBirth || !dateOfJoining || !category || !photo || !resume) {
+    if (!sanctionedPost || !name || !position.trim() || !mobile || !discipline || !dateOfBirth || !dateOfJoining || !category || !photo) {
       setError("Please fill all required fields.");
       return;
     }
@@ -210,7 +210,7 @@ export function EmployeeDetailsAddForm({ trail, backHref, id }: EmployeeDetailsF
             placeholder="Select"
           />
           <div className="space-y-1.5">
-            <Label htmlFor="staff-pay-scale">Pay Scale</Label>
+            <Label htmlFor="staff-pay-scale">Present Basic Pay</Label>
             <Input id="staff-pay-scale" type="number" className="h-10" value={payScale} onChange={(e) => setPayScale(e.target.value)} />
           </div>
 
@@ -269,7 +269,7 @@ export function EmployeeDetailsAddForm({ trail, backHref, id }: EmployeeDetailsF
               onChange={setPhoto}
             />
             <FileUploadField
-              column={{ ...RESUME_COLUMN, required: true }}
+              column={RESUME_COLUMN}
               fieldId="staff-resume"
               value={resume}
               onChange={setResume}

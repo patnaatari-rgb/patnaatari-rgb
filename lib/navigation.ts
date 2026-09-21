@@ -28,7 +28,7 @@ export type MasterColumn = {
   /** Renders a real file-upload control instead of a text input, and a thumbnail/"View" link instead of raw text in the list table. The stored value is the uploaded file's Vercel Blob URL. */
   fileKind?: "image" | "document";
   /** Which /api/upload validation rule (size/mime-type) and storage folder applies - required whenever fileKind is set. Mirrors lib/blob.ts's UploadKind (kept as a separate literal type, not imported, since that file is server-only and this one is loaded client-side too). */
-  uploadKind?: "staff-photo" | "staff-resume" | "cfld-crop-image" | "farmer-award-photo" | "success-story-image" | "rawe-attachment" | "ppv-fra-farmer-image";
+  uploadKind?: "staff-photo" | "staff-resume" | "cfld-crop-image" | "farmer-award-photo" | "success-story-image" | "rawe-attachment" | "ppv-fra-farmer-image" | "sac-meeting-file";
   /**
    * Renders as a <select> populated by another All Masters leaf's real
    * saved rows (fetched from /api/master-options) instead of free text a
@@ -98,6 +98,17 @@ export type MasterColumn = {
    */
   diffOf?: [string[], string[]];
   /**
+   * "calculated" only - live preview of this field as (first key) divided by
+   * (second key), for a real ratio field (CSISA's own BCR = Gross Return ÷
+   * Cost of Cultivation, client direction, 2026-09-15 - was a manual entry
+   * despite both source figures already being real fields on the same
+   * form). Blank while the denominator is 0/empty, same "don't show a
+   * spurious value" rule as `sumOf`/`diffOf`. Same purely-a-preview caveat:
+   * the server independently recomputes this from the same two fields on
+   * every save (leaf-record-registry.ts).
+   */
+  ratioOf?: [string, string];
+  /**
    * `key: "reportingYear"` with `staticOptions` only - the Prisma model this
    * specific Reporting Year field's real years should come from (matching
    * MODEL_PERIOD_YEAR_FIELD/MODEL_PERIOD_DATE_FIELDS' own keys in
@@ -131,8 +142,8 @@ export type MasterColumn = {
   placeholder?: string;
   /** Pre-selects this value on the Create form instead of the disabled "Select {label}" placeholder - only set where a real reference screenshot showed a value already chosen on a blank Create form (e.g. Vehicle/Equipment Present Status's Hide in Next Year defaulting to "No", Is Active to "Yes"), 2026-08-31. */
   defaultValue?: string;
-  /** Forces the Add/Edit field to stay a plain text input even though `lib/numeric-field.ts`'s label heuristic would otherwise render it `type="number"` - for a real, confirmed case where the label reads as numeric ("Horizontal Spread (in area/no.)") but the reference itself accepts mixed text (e.g. "5 villages", not just a bare number), matching this column's own DB type (`String?`, not `Int?`/`Decimal?`). Live audit finding, 2026-09-03: typing "5 villages" into the auto-detected number input silently mangled it to "5e" (the browser's native number input only lets non-digit characters through if they're valid scientific-notation syntax). Leave unset everywhere else - the heuristic is right far more often than not. */
-  numeric?: false;
+  /** `false` forces the Add/Edit field to stay a plain text input even though `lib/numeric-field.ts`'s label heuristic would otherwise render it `type="number"` - for a real, confirmed case where the label reads as numeric ("Horizontal Spread (in area/no.)") but the reference itself accepts mixed text (e.g. "5 villages", not just a bare number), matching this column's own DB type (`String?`, not `Int?`/`Decimal?`). Live audit finding, 2026-09-03: typing "5 villages" into the auto-detected number input silently mangled it to "5e" (the browser's native number input only lets non-digit characters through if they're valid scientific-notation syntax). `true` is the opposite override, for a field whose DB column is numeric (`Int`/`Decimal`) but whose label the heuristic can't read as numeric (a domain word it excludes such as "Programme"/"Phone", or no numeric word at all such as "Closing") - without it the field is a plain text box and a stray letter is silently stored as 0. Leave unset everywhere else - the heuristic is right far more often than not. */
+  numeric?: boolean;
 };
 
 export type NavLeaf = {
@@ -218,7 +229,7 @@ const GENERIC_MASTER_COLUMNS: MasterColumn[] = [{ key: "name", label: "Name" }];
 const NARI_CASTE_COLUMNS: MasterColumn[] = [
   {
     key: "farmersDetails",
-    label: "Number of Beneficiaries",
+    label: "Number of Beneficiaries Detail",
     fieldKind: "demographic-breakdown",
     demographicVariant: "grid",
     demographicKeyOverrides: { generalMale: "male", generalFemale: "female" },
@@ -230,11 +241,43 @@ const NARI_CASTE_COLUMNS: MasterColumn[] = [
 const DEMOGRAPHIC_COLUMNS: MasterColumn[] = [
   {
     key: "farmersDetails",
-    label: "Number of Beneficiaries",
+    label: "Number of Beneficiaries Detail",
     fieldKind: "demographic-breakdown",
     demographicVariant: "grid",
     formOnly: true,
   },
+];
+
+/** The 8 field keys of an unprefixed General/OBC/SC/ST x Male/Female demographic-breakdown block. Single source for the form (MasterFormFields re-exports it) and for the totals below. */
+export const DEMOGRAPHIC_KEYS = [
+  "generalMale", "generalFemale", "obcMale", "obcFemale",
+  "scMale", "scFemale", "stMale", "stFemale",
+] as const;
+
+/**
+ * Spread onto a leaf's own "number of farmers/participants" count so it is
+ * filled in automatically from that leaf's Number of Beneficiaries Detail
+ * grid instead of being typed twice (client direction, 2026-09-21). Shown as
+ * a disabled field that updates as the grid is filled. The server derives
+ * the stored value from the same 8 fields on every save
+ * (demographicTotal in leaf-record-registry.ts), so nothing the browser
+ * sends for this key is ever trusted. Only for leaves whose breakdown block
+ * is unprefixed (`farmersDetails` with no demographicPrefix).
+ */
+const BENEFICIARY_TOTAL: Partial<MasterColumn> = {
+  readonly: true,
+  fieldKind: "calculated",
+  sumOf: [...DEMOGRAPHIC_KEYS],
+  helperText: "Auto-calculated: total of the beneficiary details below",
+};
+
+/** Role choices for the "Project Team" dropdown, shared by every Project section's Team leaf so they can never drift apart (client direction, 2026-09-21: PI and Co-PI added alongside the existing roles). */
+const PROJECT_TEAM_ROLES = ["PI", "Co-PI", "Nodal Officer", "Associate Member"];
+
+/** Calendar-order month choices for every "Month" field, so a month is picked instead of typed (client direction, 2026-09-21). Same full names the Staff Quarters and CFLD Technical Parameter forms already use. */
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 function leaf(
@@ -956,7 +999,7 @@ const aboutKvk = group(
         { key: "email", label: "Email", formOrder: 4 },
         { key: "sanctionedPost", label: "Sanctioned Post", sourceMaster: { master: "sanctioned-post", optionKey: "name" }, formOrder: 5 },
         { key: "mobile", label: "Mobile", formOrder: 6 },
-        { key: "payScale", label: "Pay Scale", sourceMaster: { master: "pay-scale", optionKey: "name" }, formOrder: 7 },
+        { key: "payScale", label: "Present Basic Pay", sourceMaster: { master: "pay-scale", optionKey: "name" }, formOrder: 7 },
         { key: "dateOfJoining", label: "Date of Joining", formOrder: 8 },
         { key: "jobType", label: "Job Type", sourceMaster: { master: "job-type", optionKey: "name" }, formOrder: 9 },
         { key: "allowances", label: "Details of Allowances", formOrder: 10 },
@@ -987,6 +1030,25 @@ const aboutKvk = group(
           { key: "latestKvkName", label: "To Transfer KVK Name" },
         ],
         "Details of Staff Transferred",
+      ),
+      /**
+       * Client direction, 2026-09-19: retirement is an Employee Details row
+       * action (Action -> Retired, a date-only popup), the same way Transfer
+       * is - not a field on the Add/Edit form. A retired staff member leaves
+       * Employee Details and lands here, in a read-only list beside Staff
+       * Transferred.
+       */
+      leaf(
+        "staff-retired",
+        "Staff Retired",
+        [
+          { key: "kvk", label: "KVK Name" },
+          { key: "staffName", label: "Staff Name" },
+          { key: "position", label: "Position" },
+          { key: "sanctionedPost", label: "Sanctioned Post" },
+          { key: "dateOfRetirement", label: "Date of Retirement" },
+        ],
+        "Details of Staff Retired",
       ),
     ]),
     group("land-infrastructure", "Land & Infrastructure Information", [
@@ -1502,12 +1564,17 @@ const achievements = group("achievements", "Achievements", [
     /** Real sidebar label confirmed live: "Celebration of important days", not "Celebration Days". */
     leaf("celebration-days", "Celebration of important days", [
       { key: "kvk", label: "KVK", readonly: true },
-      { key: "importantDay", label: "Important Days", sourceMaster: { master: "important-day", optionKey: "name" }, formOrder: 2, required: true },
-      { key: "eventDate", label: "Event Date", fieldKind: "date", formOrder: 1, required: true },
-      { key: "noOfActivities", label: "No of Activities", formOrder: 3, required: true },
+      /** Client pointer, 2026-09-15: "Event Date" replaced by a real Start/End Date pair (same convention as Extension Activities/Technology Week Celebration above). */
+      { key: "startDate", label: "Start Date", fieldKind: "date", formOrder: 1, required: true },
+      { key: "endDate", label: "End Date", fieldKind: "date", formOrder: 2, required: true },
+      { key: "importantDay", label: "Important Days", sourceMaster: { master: "important-day", optionKey: "name" }, formOrder: 3, required: true },
+      { key: "noOfActivities", label: "No of Activities", formOrder: 4, required: true },
       /** Real Edit form fields confirmed live 2026-08-15 ("Edit Celebration Days") - same two-block shape as Extension Activities above, were entirely missing before this. Both blocks use the real flat grid+badges layout (demographicVariant: "grid", re-confirmed live 2026-09-02). */
       { key: "farmersDetails", label: "Farmers", fieldKind: "demographic-breakdown", demographicPrefix: "farmers", demographicVariant: "grid", formOnly: true },
       { key: "extensionOfficials", label: "Extension Officials", fieldKind: "demographic-breakdown", demographicPrefix: "officials", demographicVariant: "grid", formOnly: true },
+      /** Client pointer, 2026-09-15: third beneficiary category, same breakdown shape as the two blocks above, plus a combined Name/Designation/Address field (same single-field convention as Dignitaries Visited NICRA Villages' own `name`). */
+      { key: "vipDetails", label: "Public Representative/Other VIPs/Dignitaries/Government Officials", fieldKind: "demographic-breakdown", demographicPrefix: "vip", demographicVariant: "grid", formOnly: true },
+      { key: "vipNameDesignationAddress", label: "Public Representative/VIP - Name, Designation & Address", placeholder: "e.g. Shri Ramesh Kumar, District Magistrate, Collectorate, Patna, Bihar" },
     ]),
     /**
      * Moved back in here from the separate "Soil and Water Testing" group
@@ -1543,6 +1610,7 @@ const achievements = group("achievements", "Achievements", [
         // List table header keeps the full text via `label` above.
         formLabel: "Total No. of Participants Attended",
         formOrder: 5,
+        ...BENEFICIARY_TOTAL,
       },
       { key: "farmersDetails", label: "Farmers Details", fieldKind: "demographic-breakdown", demographicVariant: "grid", formOnly: true },
     ]),
@@ -2057,6 +2125,14 @@ const projects = group(
         { key: "crop", label: "Crop", required: true },
         { key: "image", label: "Image", fileKind: "image", uploadKind: "cfld-crop-image" },
       ]),
+      /** Client direction, 2026-09-21: the Project "Team" addon now covers every Project section except the last one, Other Programmes (CFLD, NARI and Seed Hub Program were missing it); same shape as ARYA's own Team. */
+      leaf("cfld-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
+      ]),
     ]),
     /**
      * Real columns + structure confirmed live against atariams.org
@@ -2069,10 +2145,10 @@ const projects = group(
     group("nicra", "NICRA (Technology Demonstration component)", [
       leaf("basic-information", "Basic Information", [
         { key: "kvk", label: "KVK", readonly: true },
-        { key: "rfDistrictNormal", label: "RF (mm) district Normal", required: true },
-        { key: "rfDistrictReceived", label: "RF (mm) district Received", required: true },
-        { key: "maxTemperature", label: "Max. Temperature 0C", required: true },
-        { key: "minTemperature", label: "Min. Temperature 0C", required: true },
+        { key: "rfDistrictNormal", label: "District Normal Rainfall (mm)", required: true },
+        { key: "rfDistrictReceived", label: "District Received Rainfall (mm)", required: true },
+        { key: "maxTemperature", label: "Max. Temperature (°C)", required: true },
+        { key: "minTemperature", label: "Min. Temperature (°C)", required: true },
         /** Report 3.2.A "Basic Information" columns - dry spell / drought bands, NICRA-adopted-village count, flood averages (added 2026-09-03). */
         { key: "drySpell10Days", label: "Dry spell > 10 days" },
         { key: "drySpell15Days", label: "Dry spell > 15 days" },
@@ -2089,16 +2165,16 @@ const projects = group(
       leaf("details", "Details", [
         { key: "kvk", label: "KVK", readonly: true },
         { key: "cropName", label: "Crop Name", required: true },
-        { key: "seasonName", label: "Season Name", required: true },
+        { key: "seasonName", label: "Season Name", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "technologyDemonstration", label: "Technology demonstration", required: true },
-        { key: "noOfFarmers", label: "No. of farmers", required: true },
+        { key: "noOfFarmers", label: "No. of farmers", ...BENEFICIARY_TOTAL },
         /** Report 3.2.B "Details" columns - Category / Sub-category pivot with Area/Unit and Net return (added 2026-09-03). */
         { key: "category", label: "Category" },
         { key: "subCategory", label: "Sub-category" },
         { key: "areaOrUnit", label: "Area/Unit", numeric: false },
         { key: "netReturn", label: "Net return" },
         /** KVK report 3.2.B per-record detail columns (added 2026-09-03). */
-        { key: "month", label: "Month" },
+        { key: "month", label: "Month", staticOptions: MONTH_NAMES },
         { key: "yield", label: "Yield" },
         { key: "grossCost", label: "Gross cost" },
         { key: "grossReturn", label: "Gross return" },
@@ -2110,7 +2186,7 @@ const projects = group(
         { key: "title", label: "Title", required: true },
         { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
         { key: "endDate", label: "End Date", fieldKind: "date", required: true },
-        { key: "farmersAttended", label: "Number of farmers attended", required: true },
+        { key: "farmersAttended", label: "Number of farmers attended", ...BENEFICIARY_TOTAL },
         /** KVK report 3.2.C columns (added 2026-09-03). */
         { key: "duration", label: "Duration" },
         { key: "trainingType", label: "Training Type" },
@@ -2122,7 +2198,7 @@ const projects = group(
         { key: "places", label: "Places", required: true },
         { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
         { key: "endDate", label: "End Date", fieldKind: "date", required: true },
-        { key: "farmersAttended", label: "Number of farmers attended", required: true },
+        { key: "farmersAttended", label: "Number of farmers attended", ...BENEFICIARY_TOTAL },
         ...DEMOGRAPHIC_COLUMNS,
       ]),
       group("others", "Others", [
@@ -2154,7 +2230,7 @@ const projects = group(
             {
               key: "farmersUsed",
               label: "No. of farmers used Implement",
-              required: true,
+              ...BENEFICIARY_TOTAL,
             },
             {
               key: "areaCovered",
@@ -2209,7 +2285,7 @@ const projects = group(
             {
               key: "farmersBenefitted",
               label: "No. of farmers benefitted",
-              required: true,
+              ...BENEFICIARY_TOTAL,
             },
             ...DEMOGRAPHIC_COLUMNS,
           ],
@@ -2228,12 +2304,13 @@ const projects = group(
           [
             { key: "kvk", label: "KVK", readonly: true },
             { key: "vipExperts", label: "VIP/Experts", required: true, sourceMaster: { master: "nicra-dignitary-type", optionKey: "name" } },
-            { key: "name", label: "Name", required: true },
+            /** Client pointer, 2026-09-15: Address was missing, and Name/Designation/Address must all be entered as one combined field rather than three separate ones - kept as this leaf's existing single `name` column (no schema change) rather than adding new Designation/Address columns. */
+            { key: "name", label: "Name, Designation & Address", required: true, placeholder: "e.g. Dr. Ramesh Kumar, Director, ICAR-ATARI Patna, Patna, Bihar" },
             { key: "dateOfVisit", label: "Date of visited", fieldKind: "date", required: true },
             { key: "remark", label: "Remark" },
           ],
         ),
-        leaf("pi-co-pi-list", "Name of PI & Co-PI List", [
+        leaf("pi-co-pi-list", "Project Team Detail", [
           { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
           { key: "endDate", label: "End Date", fieldKind: "date", required: true },
           { key: "kvk", label: "KVK", readonly: true },
@@ -2289,6 +2366,14 @@ const projects = group(
         { key: "employmentOtherThanFamily", label: "Employment generated/year - Other than Family", formLabel: "Employment Generated/Year - Other" },
         { key: "personsVisited", label: "No. of persons visited entrepreneur unit" },
       ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("arya-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
+      ]),
     ], { cardLabel: "ARYA / SARAL" }),
     /** Real group label confirmed live: "Out-scaling of Natural Farming" (in-page title); card label on the Projects landing page is the short "Natural Farming" (confirmed live, 2026-08-29 "project over" reference). */
     group("natural-farming", "Out-scaling of Natural Farming", [
@@ -2316,7 +2401,7 @@ const projects = group(
         },
         { key: "trainingDate", label: "Date of Training", fieldKind: "date", required: true },
         { key: "venue", label: "Venue of programme", required: true },
-        { key: "participants", label: "Participants", required: true },
+        { key: "participants", label: "Participants", ...BENEFICIARY_TOTAL },
         /** Report 3.5.B "Physical Information" caste M/F participant grid + remark (added 2026-09-03). */
         ...DEMOGRAPHIC_COLUMNS,
         { key: "remarks", label: "Remarks/Observation/Feedback Recorded" },
@@ -2385,7 +2470,7 @@ const projects = group(
       leaf("nf-soil-data", "Soil Data information", [
         { key: "kvk", label: "KVK Name", readonly: true },
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
-        { key: "type", label: "Type", required: true },
+        { key: "type", label: "Soil Type", required: true },
         { key: "crop", label: "Crop", required: true },
         { key: "beforePh", label: "Before pH", required: true },
         { key: "beforeEc", label: "Before EC (dS/m)", required: true },
@@ -2407,13 +2492,30 @@ const projects = group(
         { key: "kvk", label: "KVK Name", readonly: true },
         { key: "activityName", label: "Name of Activity", required: true },
         { key: "activitiesOrganised", label: "Number of activity organised", required: true },
-        { key: "budgetSanction", label: "Budget sanction (Rs)", required: true },
+        { key: "budgetSanction", label: "Budget Receipt (Rs)", required: true },
         { key: "budgetExpenditure", label: "Budget expenditure (Rs)", required: true },
         {
           key: "totalBudgetExpenditure",
           label: "Total Budget Expenditure (Rs)",
           required: true,
         },
+        /** Client pointer, 2026-09-15: "Balance" = Budget Receipt - Budget Expenditure, same auto-calculated diffOf pattern as CfldBudgetUtilization's own per-item Balance fields. */
+        {
+          key: "balance",
+          label: "Balance (Rs)",
+          fieldKind: "calculated",
+          readonly: true,
+          diffOf: [["budgetSanction"], ["budgetExpenditure"]],
+          helperText: "Auto-calculated: Budget Receipt - Budget Expenditure",
+        },
+      ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("nf-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
       ]),
     ], { cardLabel: "Natural Farming" }),
     /** Real structure confirmed live: ONE combined leaf "View Sub Plan Activity" with a Type column (TSP/SCSP), not two separate leaves. */
@@ -2427,6 +2529,14 @@ const projects = group(
         /** KVK report 3.6 also carries a per-plan Fund received (Rs. in lakh) and a physical-outcome note (added 2026-09-03). */
         { key: "fundReceivedLakh", label: "Fund received (Rs. in lakh)" },
         { key: "physicalOutcomeNote", label: "Physical outcome note" },
+      ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("tsp-scsp-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
       ]),
     ]),
     /**
@@ -2504,6 +2614,14 @@ const projects = group(
         { key: "noOfActivities", label: "No of Activities", required: true },
         ...NARI_CASTE_COLUMNS,
       ]),
+      /** Client direction, 2026-09-21: the Project "Team" addon now covers every Project section except the last one, Other Programmes (CFLD, NARI and Seed Hub Program were missing it); same shape as ARYA's own Team. */
+      leaf("nari-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
+      ]),
     ]),
     group("agri-drone", "Agri-Drone", [
       leaf("agri-drone-introduction", "Introduction", [
@@ -2518,7 +2636,7 @@ const projects = group(
         { key: "costPerDrone", label: "Purchased cost of each Drone (Rs.)", required: true },
         { key: "pilotNameContact", label: "Name and contact No of Agri Drone Pilot", required: true },
         { key: "targetAreaHa", label: "Target Area for Demonstration (ha)", required: true },
-        { key: "amountSanctionedDemo", label: "Amount sanctioned for Demonstrations (Rs)", required: true },
+        { key: "amountSanctionedDemo", label: "Amount Receipt for Demonstration", required: true },
         { key: "amountUtilisedDemo", label: "Amount utilised for Demonstrations (Rs)", required: true },
         { key: "areaCoveredDemoHa", label: "Area covered under demos (ha)", required: true },
         { key: "operationType", label: "Operation carried out", required: true },
@@ -2534,9 +2652,17 @@ const projects = group(
         { key: "cropName", label: "Crop Name", required: true },
         { key: "noOfDemos", label: "No. of demos", required: true },
         { key: "areaCovered", label: "Area covered under demos.", required: true },
-        { key: "noOfFarmers", label: "No of farmers", required: true },
+        { key: "noOfFarmers", label: "No of farmers", ...BENEFICIARY_TOTAL },
         /** Report 3.8.B "Demonstration" caste M/F participant grid (added 2026-09-03). */
         ...DEMOGRAPHIC_COLUMNS,
+      ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("agri-drone-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
       ]),
     ]),
     group("fpo-cbbo", "FPO and CBBO", [
@@ -2599,6 +2725,14 @@ const projects = group(
         { key: "areaHa", label: "Area (ha)", required: true },
         { key: "totalFarmersAttached", label: "Total No. of Farmers Attached", required: true },
         { key: "successIndicator", label: "Success Indicator", required: true },
+      ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("fpo-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
       ]),
     ]),
     group("drmr", "DRMR", [
@@ -2673,6 +2807,14 @@ const projects = group(
         { key: "quantity", label: "Quantity" },
         ...DEMOGRAPHIC_COLUMNS,
       ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("drmr-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
+      ]),
     ]),
     /** Columns confirmed against the client's own "Climate Resilient" and "CRA Extension Activity" screenshots (AMS User Manual p.30-32). */
     group("cra", "Climate Resilient Agriculture (CRA)", [
@@ -2682,7 +2824,7 @@ const projects = group(
         { key: "technologyDemonstrated", label: "Technology Demonstrated", required: true },
         { key: "croppingSystem", label: "Cropping System", required: true, sourceMaster: { master: "cropping-system", optionKey: "cropName" } },
         { key: "areaHa", label: "Area (ha)", required: true },
-        { key: "noOfFarmer", label: "No. of Farmer", required: true },
+        { key: "noOfFarmer", label: "No. of Farmer", ...BENEFICIARY_TOTAL },
         { key: "farmingSystem", label: "Farming System", required: true, sourceMaster: { master: "farming-system", optionKey: "farmingSystemName" } },
         { key: "crop", label: "Crop Under Demonstration", required: true },
         { key: "cropYieldQha", label: "Crop Yield (q/ha)", required: true },
@@ -2701,10 +2843,18 @@ const projects = group(
         {
           key: "farmersUnderExposure",
           label: "Number of Farmers Under Exposure",
-          required: true,
+          ...BENEFICIARY_TOTAL,
         },
         // Report 3.11.B breaks "Number of farmers under exposure" down by General/OBC/SC/ST x M/F.
         { key: "farmersDetails", label: "Number of farmers under exposure", fieldKind: "demographic-breakdown", demographicVariant: "grid", formOnly: true },
+      ]),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("cra-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
       ]),
     ]),
     group("csisa", "CSISA", [
@@ -2718,7 +2868,8 @@ const projects = group(
           { key: "blockCovered", label: "Block Covered(no.)", required: true },
           { key: "districtCovered", label: "District Covered(no.)", required: true },
           { key: "respondent", label: "Respondent" },
-          { key: "trailName", label: "Trail Name" },
+          /** Client pointer, 2026-09-15: label had a spelling error ("Trail Name") - fixed to "Trial Name". Column key stays `trailName` (matches the existing DB column/schema field of the same name; no schema change for a display-text fix). */
+          { key: "trailName", label: "Trial Name" },
           { key: "areaCoveredHa", label: "Area Covered (ha)" },
           { key: "cropName", label: "Name of Crop" },
           { key: "techOptions", label: "Tech. Options" },
@@ -2731,9 +2882,18 @@ const projects = group(
           { key: "costOfCultivationRsHa", label: "Cost of Cultivation (Rs/ha)" },
           { key: "grossReturnRsHa", label: "Gross Return (Rs/ha)" },
           { key: "netReturnRsHa", label: "Net Return (Rs/ha)" },
-          { key: "bcr", label: "BCR" },
+          /** Client pointer, 2026-09-15: auto-calculate BCR instead of manual entry - Gross Return ÷ Cost of Cultivation, same ratio every other BCR in this app (e.g. FLD Result's own bcrDemo) already uses. */
+          { key: "bcr", label: "BCR", fieldKind: "calculated", readonly: true, ratioOf: ["grossReturnRsHa", "costOfCultivationRsHa"], helperText: "Auto-calculated: Gross Return ÷ Cost of Cultivation" },
         ],
       ),
+      /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): same shape as NICRA's own "Project Team Detail" (point 5 of the same request). */
+      leaf("csisa-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
+      ]),
     ]),
     group("seed-hub", "Seed Hub Program", [
       leaf("seed-hub-program", "Seed Hub Program", [
@@ -2752,6 +2912,14 @@ const projects = group(
         { key: "amountGeneratedLakh", label: "Amount Generated (Lakh)", required: true },
         { key: "totalAmountInProjectLakh", label: "Total Amount in Project (Lakh)", required: true },
       ]),
+      /** Client direction, 2026-09-21: Team added to Seed Hub Program as well; same shape as ARYA's own Team. */
+      leaf("seed-hub-team", "Team", [
+        { key: "kvk", label: "KVK Name", readonly: true },
+        { key: "startDate", label: "Start Date", fieldKind: "date", required: true },
+        { key: "endDate", label: "End Date", fieldKind: "date", required: true },
+        { key: "projectTeam", label: "Project Team", staticOptions: PROJECT_TEAM_ROLES, required: true },
+        { key: "name", label: "Name", required: true },
+      ]),
     ]),
     /** Real full label confirmed live: "Any other programme organized by KVK, not covered above" - the earlier "Other Programmes" was a truncated-on-screen guess. */
     group(
@@ -2764,7 +2932,7 @@ const projects = group(
           { key: "programmeDate", label: "Date of the programme", fieldKind: "date", required: true },
           { key: "venue", label: "Venue", required: true },
           { key: "purpose", label: "Purpose", required: true },
-          { key: "participants", label: "No. of participants", required: true },
+          { key: "participants", label: "No. of participants", ...BENEFICIARY_TOTAL },
           ...DEMOGRAPHIC_COLUMNS,
         ]),
       ],
@@ -2864,7 +3032,7 @@ const performanceIndicators = group(
         { key: "cellNoEmail", label: "Cell no./E-mail", required: true, formOnly: true },
         { key: "fullAddress", label: "Full Address", required: true, formOnly: true },
         { key: "professionalMembership", label: "Professional Membership", required: true, formOnly: true },
-        { key: "majorAchievement", label: "Major Achievement of the Farmers", required: true },
+        { key: "majorAchievement", label: "Major Achievement of the Farmers", required: true, numeric: false },
         { key: "awardsReceived", label: "Awards Received", required: true, formOnly: true },
         { key: "professionalInfoSectionHeading", label: "Professional Information", fieldKind: "section-heading", formOnly: true },
         {
@@ -2921,10 +3089,10 @@ const performanceIndicators = group(
       ]),
       leaf("district-monthly-weather", "Mean Yearly Temperature, Rainfall, Humidity", [
         { key: "kvk", label: "KVK", readonly: true },
-        { key: "month", label: "Month", required: true },
+        { key: "month", label: "Month", required: true, staticOptions: MONTH_NAMES },
         { key: "rainfallMm", label: "Rainfall (mm)" },
-        { key: "maxTempC", label: "Max. Temp. (0C)" },
-        { key: "minTempC", label: "Min. Temp. (0C)" },
+        { key: "maxTempC", label: "Max. Temp. (°C)", numeric: true },
+        { key: "minTempC", label: "Min. Temp. (°C)", numeric: true },
         { key: "maxRhPct", label: "Max. R.H. (%)" },
         { key: "minRhPct", label: "Min. R.H. (%)" },
         { key: "remarks", label: "Remarks" },
@@ -2942,7 +3110,7 @@ const performanceIndicators = group(
         { key: "taluk", label: "Taluk", required: true },
         { key: "block", label: "Block", required: true },
         { key: "village", label: "Village", required: true },
-        { key: "majorCrops", label: "Major Crops", required: true },
+        { key: "majorCrops", label: "Major Crops", required: true, numeric: false },
         {
           key: "majorProblems",
           label: "Major Problems Identified (crop-wise)",
@@ -3027,11 +3195,11 @@ const performanceIndicators = group(
         { key: "kvk", label: "KVK Name", readonly: true },
         // Real Add form field confirmed live (atariams.org/infra-performance/hostel-facility/create, 2026-09-03) - was missing entirely before, not a table column there.
         { key: "reportingYear", label: "Reporting Year", required: true, formOnly: true },
-        { key: "months", label: "Months", required: true },
+        { key: "months", label: "Months", required: true, staticOptions: MONTH_NAMES },
         { key: "traineesStayed", label: "No. of Trainees Stayed", required: true },
         { key: "traineeDays", label: "Trainee Days (Days Stayed)", required: true },
         // Real reference (2026-09-03) marks this required too, and it isn't a column on its own table (own table: KVK/Months/Trainees/Trainee Days only) - hidden from ours to match.
-        { key: "reasonForShortFall", label: "Reason for Short Fall", required: true, formOnly: true },
+        { key: "reasonForShortFall", label: "Reason for Shortfall", required: true, formOnly: true },
       ], "Hostel Utilization", undefined, "Hostel Utilization", undefined, "Hostel Utilization"),
       leaf("staff-quarters-performance", "Utilization of Staff Quarters", [
         { key: "kvk", label: "KVK Name", readonly: true },
@@ -3050,6 +3218,7 @@ const performanceIndicators = group(
           key: "trainingProgrammes",
           label: "No of Training Programme Conducted",
           required: true,
+          numeric: true,
         },
         { key: "demonstrations", label: "No. of Demonstrations", required: true },
         {
@@ -3122,7 +3291,7 @@ const performanceIndicators = group(
         { key: "openingBalance", label: "Opening Balance as on 1st April", required: true },
         { key: "incomeDuringYear", label: "Income During the Year", required: true },
         { key: "expenditureDuringYear", label: "Expenditure During the Year", required: true },
-        { key: "closing", label: "Closing", required: true },
+        { key: "closing", label: "Closing", required: true, numeric: true },
         // Real reference (atariams.org/financial-performance/revolving-fund-status/create, 2026-09-04) has no asterisk on this field, unlike the other 5 - was wrongly marked required before.
         { key: "kind", label: "Kind" },
       ], "Revolving Fund", undefined, "Revolving Fund", undefined, "Revolving Fund"),
@@ -3202,7 +3371,7 @@ const meetings = group("meetings", "Meetings", [
       { key: "actionTaken", label: "Action - Taken" },
       { key: "actionCompliance", label: "Action - In Compliance" },
       { key: "reason", label: "Action - Reason" },
-      { key: "file", label: "File" },
+      { key: "file", label: "File/Proceeding", fileKind: "document", uploadKind: "sac-meeting-file" },
     ],
   ),
   /** Columns re-confirmed live 2026-08-25 - exact match. No `cardLabel` override (client direction, 2026-09-03 - same as SAC Meetings above), so the card shows the full label below instead of a shortened "Other Meetings related to ATARI". */
@@ -3250,7 +3419,7 @@ const miscellaneous = group("miscellaneous", "Miscellaneous", [
     { key: "diseaseName", label: "Name of the Disease", required: true },
     { key: "speciesAffected", label: "Species Affected", required: true },
     { key: "outbreakDate", label: "Date of Outbreak", fieldKind: "date", required: true },
-    { key: "mortalityMorbidity", label: "Number of Death/Morbidity Rate (%)", required: true },
+    { key: "mortalityMorbidity", label: "Number of Death/Morbidity Rate (%)", required: true, numeric: false },
     { key: "animalsVaccinated", label: "Number of Animals Vaccinated", required: true },
     {
       key: "preventiveMeasures",
@@ -3339,6 +3508,7 @@ const miscellaneous = group("miscellaneous", "Miscellaneous", [
       {
         key: "mobileAppsDeveloped",
         label: "Number of Mobile Apps Developed by KVK",
+        numeric: true,
       },
       { key: "appName", label: "Name of the Apps" },
       { key: "appLanguage", label: "Language of the Apps" },
@@ -3364,8 +3534,8 @@ const miscellaneous = group("miscellaneous", "Miscellaneous", [
         key: "farmersRegisteredKsp",
         label: "No. of Farmers Registered on KSP Portal",
       },
-      { key: "phoneCallAddressed", label: "Phone Call Addressed" },
-      { key: "answeredCall", label: "Answered Call" },
+      { key: "phoneCallAddressed", label: "Phone Call Addressed", numeric: true },
+      { key: "answeredCall", label: "Answered Call", numeric: true },
     ]),
     leaf(
       "digital-kmas",
@@ -3399,16 +3569,17 @@ const miscellaneous = group("miscellaneous", "Miscellaneous", [
       "Details of messages send through other channels",
       [
         { key: "kvk", label: "KVK Name" },
-        { key: "textAdvisories", label: "Advisories Through Text Messages" },
+        { key: "textAdvisories", label: "Advisories Through Text Messages", numeric: true },
         {
           key: "textFarmers",
           label: "No. of Farmers Sent Text Messages",
         },
-        { key: "whatsappAdvisories", label: "Advisories Through WhatsApp" },
+        { key: "whatsappAdvisories", label: "Advisories Through WhatsApp", numeric: true },
         { key: "whatsappFarmers", label: "No. of Farmers Sent WhatsApp" },
         {
           key: "socialMediaAdvisories",
           label: "Advisories Through Social Media",
+          numeric: true,
         },
         {
           key: "socialMediaFarmers",
@@ -3417,6 +3588,7 @@ const miscellaneous = group("miscellaneous", "Miscellaneous", [
         {
           key: "weatherBulletinAdvisories",
           label: "Advisories Through Weather Advisory Bulletin",
+          numeric: true,
         },
         {
           key: "weatherBulletinFarmers",

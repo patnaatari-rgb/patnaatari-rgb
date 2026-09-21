@@ -36,6 +36,36 @@ const EVENT_DEMOGRAPHIC_SLUGS = new Set<string>([]);
 /** Every Form Management leaf Reports files a Module Images category for - the same list Reports and the standalone Module Images page draw from. */
 const REPORT_LEAF_PATHS = new Set(REPORT_FORM_LEAVES.map((leaf) => leaf.path));
 
+/** Every Project section's "Team" leaf (slug) and the Prisma model behind it. Other Programmes (the last section) has no Team; NICRA's own equivalent is "Project Team Detail" (pi-co-pi-list). */
+const PROJECT_TEAM_MODEL_BY_SLUG = {
+  "cfld-team": "cfldProjectTeam",
+  "arya-team": "aryaProjectTeam",
+  "nf-team": "nfProjectTeam",
+  "tsp-scsp-team": "tspScspProjectTeam",
+  "nari-team": "nariProjectTeam",
+  "seed-hub-team": "seedHubProjectTeam",
+  "agri-drone-team": "agriDroneProjectTeam",
+  "fpo-team": "fpoProjectTeam",
+  "drmr-team": "drmrProjectTeam",
+  "cra-team": "craProjectTeam",
+  "csisa-team": "csisaProjectTeam",
+} as const;
+type ProjectTeamSlug = keyof typeof PROJECT_TEAM_MODEL_BY_SLUG;
+
+function isProjectTeamSlug(slug: string): slug is ProjectTeamSlug {
+  return Object.hasOwn(PROJECT_TEAM_MODEL_BY_SLUG, slug);
+}
+
+type ProjectTeamRecord = { id: string; startDate: Date; endDate: Date; projectTeam: string; name: string; kvk: { name: string } };
+
+/** The ten Project Team models are column-for-column identical, so this one narrow structural type stands in for their ten separate Prisma delegates. */
+function findProjectTeamRows(slug: ProjectTeamSlug, where: { kvkId?: string; zoneId?: string }): Promise<ProjectTeamRecord[]> {
+  const delegate = prisma[PROJECT_TEAM_MODEL_BY_SLUG[slug]] as unknown as {
+    findMany(args: { where: typeof where; include: { kvk: true }; orderBy: { createdAt: "desc" } }): Promise<ProjectTeamRecord[]>;
+  };
+  return delegate.findMany({ where, include: { kvk: true }, orderBy: { createdAt: "desc" } });
+}
+
 /** The end-of-form "Photographs (with caption)" section every generic leaf's Add/Edit form now carries - on save it flows straight into Module Images -> Reports (see lib/leaf-record-registry.ts syncLeafModuleImages). */
 const MODULE_IMAGES_COLUMN: MasterColumn = {
   key: "moduleImages",
@@ -139,7 +169,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
   // all), but the client asked for it to match every sibling leaf instead -
   // a real list with its own Add New/Edit pages (client direction,
   // 2026-09-13).
-  if ((isAddPage || isEditPage) && node.type === "leaf" && node.slug === "staff-transferred") {
+  if ((isAddPage || isEditPage) && node.type === "leaf" && (node.slug === "staff-transferred" || node.slug === "staff-retired")) {
     redirect(`/forms/${slug.join("/")}`);
   }
 
@@ -430,8 +460,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       totalCount: rows.length,
     };
   } else if (user && node.type === "leaf" && node.slug === "employee-details") {
+    // A retired staff member (Action -> Retired sets dateOfRetirement) moves
+    // out of Employee Details into Staff Retired.
     const rows = await prisma.staff.findMany({
-      where: kvkScope,
+      where: { ...kvkScope, dateOfRetirement: null },
       include: { kvk: true },
       orderBy: { createdAt: "desc" },
     });
@@ -523,6 +555,23 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         latestKvkName: r.toKvk.name,
         dateOfRelieving: r.transferDate.toISOString().slice(0, 10),
         historyJson: JSON.stringify(historyByStaffId.get(r.staffId) ?? []),
+      })),
+      totalCount: rows.length,
+    };
+  } else if (user && node.type === "leaf" && node.slug === "staff-retired") {
+    const rows = await prisma.staff.findMany({
+      where: { ...kvkScope, dateOfRetirement: { not: null } },
+      include: { kvk: true },
+      orderBy: { dateOfRetirement: "desc" },
+    });
+    formData = {
+      rows: rows.map((r) => ({
+        id: r.id,
+        kvk: r.kvk.name,
+        staffName: r.name,
+        position: r.position ?? "",
+        sanctionedPost: r.sanctionedPost,
+        dateOfRetirement: r.dateOfRetirement ? r.dateOfRetirement.toISOString().slice(0, 10) : "",
       })),
       totalCount: rows.length,
     };
@@ -937,7 +986,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         importantDay: r.importantDay,
-        eventDate: r.eventDate.toISOString().slice(0, 10),
+        startDate: r.startDate.toISOString().slice(0, 10),
+        endDate: r.endDate.toISOString().slice(0, 10),
         noOfActivities: String(r.noOfActivities),
         farmersGeneralMale: String(r.farmersGeneralMale),
         farmersGeneralFemale: String(r.farmersGeneralFemale),
@@ -955,6 +1005,15 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         officialsScFemale: String(r.officialsScFemale),
         officialsStMale: String(r.officialsStMale),
         officialsStFemale: String(r.officialsStFemale),
+        vipGeneralMale: String(r.vipGeneralMale),
+        vipGeneralFemale: String(r.vipGeneralFemale),
+        vipObcMale: String(r.vipObcMale),
+        vipObcFemale: String(r.vipObcFemale),
+        vipScMale: String(r.vipScMale),
+        vipScFemale: String(r.vipScFemale),
+        vipStMale: String(r.vipStMale),
+        vipStFemale: String(r.vipStFemale),
+        vipNameDesignationAddress: r.vipNameDesignationAddress ?? "",
       })),
       totalCount: rows.length,
     };
@@ -1549,6 +1608,20 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       })),
       totalCount: rows.length,
     };
+  } else if (user && node.type === "leaf" && isProjectTeamSlug(node.slug)) {
+    /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon") - same shape as NICRA's own "Project Team Detail" above, one model per Project section (PROJECT_TEAM_MODEL_BY_SLUG). */
+    const rows = await findProjectTeamRows(node.slug, kvkScope);
+    formData = {
+      rows: rows.map((r) => ({
+        id: r.id,
+        startDate: r.startDate.toISOString().slice(0, 10),
+        endDate: r.endDate.toISOString().slice(0, 10),
+        kvk: r.kvk.name,
+        projectTeam: r.projectTeam,
+        name: r.name,
+      })),
+      totalCount: rows.length,
+    };
   } else if (user && node.type === "leaf" && node.slug === "arya-safal-current-year") {
     const rows = await prisma.aryaCurrentYearDetail.findMany({
       where: kvkScope,
@@ -1738,6 +1811,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         budgetSanction: String(r.budgetSanction),
         budgetExpenditure: String(r.budgetExpenditure),
         totalBudgetExpenditure: String(r.totalBudgetExpenditure),
+        balance: r.balance != null ? String(r.balance) : "",
       })),
       totalCount: rows.length,
     };
@@ -2902,6 +2976,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           // KVK Admin, who should only see their own existing KVK info).
           hideAddNew={
             node.slug === "staff-transferred" ||
+            node.slug === "staff-retired" ||
             (node.slug === "view-kvks" ? Boolean(user?.kvkId) : !user?.kvkId)
           }
           addNewHref={
@@ -2920,9 +2995,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           resultKind={node.slug === "view-fld" ? "fld" : node.slug === "oft" ? "oft" : undefined}
           staffTransferHistory={node.slug === "staff-transferred"}
           staffTransfer={node.slug === "employee-details"}
+          staffRetire={node.slug === "employee-details"}
           autoRefresh={node.slug === "employee-details"}
           /* atariams.org /transfer-staff is a plain read-only table (no Add, no Action) - the records come only from Employee Details' Transfer action. */
-          readOnly={node.slug === "staff-transferred"}
+          readOnly={node.slug === "staff-transferred" || node.slug === "staff-retired"}
           /** Exact wording from the client's "changes required 1.0.pdf" (2026-08-25, item 4) - each leaf's own note only, no cross-reference to the other leaf. CFLD Technical Parameter's own note is exact text confirmed against the real reference (atari-client.vercel.app, 2026-09-02). */
           note={
             node.slug === "oft"

@@ -460,6 +460,7 @@ model Kvk {
   nicraPiCoPis                    NicraPiCoPi[]
   aryaCurrentYearDetails          AryaCurrentYearDetail[]
   aryaPreviousYearEvaluations     AryaPreviousYearEvaluation[]
+  aryaProjectTeams                AryaProjectTeam[]
   nfGeographicalInfos             NfGeographicalInfo[]
   nfPhysicalInfos                 NfPhysicalInfo[]
   nfDemonstrationInfos            NfDemonstrationInfo[]
@@ -467,7 +468,9 @@ model Kvk {
   nfBeneficiaries                 NfBeneficiary[]
   nfSoilDataEntries               NfSoilData[]
   nfBudgetExpenditures            NfBudgetExpenditure[]
+  nfProjectTeams                  NfProjectTeam[]
   subPlanActivities               SubPlanActivity[]
+  tspScspProjectTeams             TspScspProjectTeam[]
   nariNutritionGardens            NariNutritionGarden[]
   nariBioFortifiedEntries         NariBioFortified[]
   nariValueAdditions              NariValueAddition[]
@@ -475,13 +478,21 @@ model Kvk {
   nariExtensions                  NariExtension[]
   agriDroneIntroductions          AgriDroneIntroduction[]
   agriDroneDemonstrations         AgriDroneDemonstration[]
+  agriDroneProjectTeams           AgriDroneProjectTeam[]
   fpoCbboDetails                  FpoCbboDetail[]
   fpoManagements                  FpoManagement[]
+  fpoProjectTeams                 FpoProjectTeam[]
   drmrDetails                     DrmrDetail[]
   drmrActivities                  DrmrActivity[]
+  drmrProjectTeams                DrmrProjectTeam[]
   craDetails                      CraDetail[]
   craExtensionActivities          CraExtensionActivity[]
+  craProjectTeams                 CraProjectTeam[]
   csisaDetails                    CsisaDetail[]
+  csisaProjectTeams               CsisaProjectTeam[]
+  cfldProjectTeams                CfldProjectTeam[]
+  seedHubProjectTeams             SeedHubProjectTeam[]
+  nariProjectTeams                NariProjectTeam[]
   seedHubPrograms                 SeedHubProgram[]
   otherProgrammes                 OtherProgramme[]
 
@@ -580,6 +591,8 @@ model Staff {
   payBand        String?
   payScale       String?
   dateOfJoining  DateTime?
+  /// Set by Employee Details' Action -> Retired (date-only popup). A staff row with this date leaves Employee Details and shows under Staff Retired; null means active. No automated eligibility/notification workflow (client's note: that process is yet to be finalized separately).
+  dateOfRetirement DateTime?
   category       String? // SC / ST / OBC / General
   jobType        String? // Permanent / Contractual / ...
   position       String?
@@ -1233,7 +1246,9 @@ model CelebrationDay {
   kvk            Kvk      @relation(fields: [kvkId], references: [id])
   zoneId         String
   importantDay   String
-  eventDate      DateTime
+  /// Client pointer, 2026-09-15: replaces the old single `eventDate` (renamed to this column) with a real Start/End Date pair, same convention as ExtensionActivity/TechnologyWeekCelebration.
+  startDate      DateTime
+  endDate        DateTime
   noOfActivities Int
 
   /// Real "Farmers" + "Extension Officials" breakdown blocks confirmed live 2026-08-15 ("Edit Celebration Days" form) - same two-block shape as ExtensionActivity above, were entirely missing before this.
@@ -1253,6 +1268,16 @@ model CelebrationDay {
   officialsScFemale      Int @default(0)
   officialsStMale        Int @default(0)
   officialsStFemale      Int @default(0)
+  /// Client pointer, 2026-09-15: third beneficiary category - "Public Representative/Other VIPs/Dignitaries/Government Officials" - same General/OBC/SC/ST x Male/Female breakdown shape as Farmers/Extension Officials above, plus a combined Name/Designation/Address field (same single-field convention as NicraDignitaryVisit.name).
+  vipGeneralMale            Int     @default(0)
+  vipGeneralFemale          Int     @default(0)
+  vipObcMale                Int     @default(0)
+  vipObcFemale              Int     @default(0)
+  vipScMale                 Int     @default(0)
+  vipScFemale               Int     @default(0)
+  vipStMale                 Int     @default(0)
+  vipStFemale               Int     @default(0)
+  vipNameDesignationAddress String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2097,6 +2122,200 @@ model NicraPiCoPi {
   @@index([kvkId])
 }
 
+/// Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon"): a common
+/// "Team" leaf added to every Project section except Other Programmes (NICRA
+/// already has its own equivalent - NicraPiCoPi, renamed "Project Team
+/// Detail" for the same request's point 5) - same shape as NicraPiCoPi
+/// (Project Team role + Name), one model per section rather than a single
+/// shared/polymorphic table, matching how every other Project section here
+/// already gets its own dedicated model instead of a generic catch-all.
+model AryaProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model NfProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model TspScspProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model AgriDroneProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model FpoProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model DrmrProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model CraProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model CsisaProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model CfldProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model NariProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
+model SeedHubProjectTeam {
+  id          String   @id @default(cuid())
+  kvkId       String
+  kvk         Kvk      @relation(fields: [kvkId], references: [id])
+  zoneId      String
+  startDate   DateTime
+  endDate     DateTime
+  projectTeam String
+  name        String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([kvkId])
+}
+
 // ---------------------------------------------------------------------------
 // Form Management -> Projects -> ARYA (Attracting and Retaining Youth in
 // Agriculture)
@@ -2352,6 +2571,8 @@ model NfBudgetExpenditure {
   budgetSanction         Decimal @db.Decimal(14, 2)
   budgetExpenditure      Decimal @db.Decimal(14, 2)
   totalBudgetExpenditure Decimal @db.Decimal(14, 2)
+  /// Client pointer, 2026-09-15: "Balance" = Budget Receipt (budgetSanction) - Budget Expenditure, auto-calculated same as CfldBudgetUtilization's own per-item Balance fields. Nullable since existing rows predate this column.
+  balance                Decimal? @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3815,6 +4036,8 @@ enum MasterListType {
   OTHER_EXTENSION_ACTIVITY_MASTER
   EVENTS_MASTER
   PUBLICATION_ITEM
+  /// Client pointer, 2026-09-15: the new "Team" addon's own role dropdown (Nodal Officer / Associate Member), shared across every Project section's Team leaf.
+  PROJECT_TEAM_ROLE
 }
 
 model MasterListItem {

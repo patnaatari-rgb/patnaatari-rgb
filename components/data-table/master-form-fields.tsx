@@ -15,12 +15,9 @@ import { MonthQuarterGridField } from "./month-quarter-grid-field";
 import { useCascadeOptions } from "./use-cascade-options";
 import { isNumericLabel } from "@/lib/numeric-field";
 import { compactPlaceholder } from "@/lib/compact-placeholder";
-import type { MasterColumn } from "@/lib/navigation";
+import { DEMOGRAPHIC_KEYS, type MasterColumn } from "@/lib/navigation";
 
-export const DEMOGRAPHIC_KEYS = [
-  "generalMale", "generalFemale", "obcMale", "obcFemale",
-  "scMale", "scFemale", "stMale", "stFemale",
-] as const;
+export { DEMOGRAPHIC_KEYS };
 
 /** "farmers" + "generalMale" -> "farmersGeneralMale" (real Prisma column name) - no prefix leaves the bare suffix untouched. Shared by every reader/writer of a prefixed demographic-breakdown block (this file, EmptyDataTable's openEdit, leaf-record-registry.ts) so they can never drift out of sync on casing. */
 export function prefixedDemographicKey(prefix: string, suffix: string): string {
@@ -493,7 +490,13 @@ export function MasterFormFields({
             ? String(sumKeys(column.sumOf))
             : column.diffOf
               ? String(sumKeys(column.diffOf[0]) - sumKeys(column.diffOf[1]))
-              : (formValues[column.key] ?? "");
+              : column.ratioOf
+                ? (() => {
+                    const denominator = Number(formValues[column.ratioOf[1]]) || 0;
+                    if (!denominator) return "";
+                    return ((Number(formValues[column.ratioOf[0]]) || 0) / denominator).toFixed(2);
+                  })()
+                : (formValues[column.key] ?? "");
           return (
             <div key={column.key} className="space-y-1.5">
               <Label htmlFor={fieldId}>
@@ -722,7 +725,7 @@ export function MasterFormFields({
               type={
                 isDateColumn(column)
                   ? "date"
-                  : column.numeric !== false && isNumericLabel(column.label, column.formLabel)
+                  : (column.numeric ?? isNumericLabel(column.label, column.formLabel))
                     ? "number"
                     : undefined
               }

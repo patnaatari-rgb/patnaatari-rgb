@@ -253,10 +253,12 @@ export async function GET(request: Request) {
       ? Promise.resolve([])
       : prisma.staff.groupBy({
           by: ["sanctionedPost"],
-          where:
-            kvkId || filterKvkIdFilter !== undefined
+          where: {
+            dateOfRetirement: null,
+            ...(kvkId || filterKvkIdFilter !== undefined
               ? { kvkId: kvkId ?? filterKvkIdFilter }
-              : { zoneId: auth.session.zoneId },
+              : { zoneId: auth.session.zoneId }),
+          },
           _count: { _all: true },
         }),
     /** Real per-OFT fields (not just the ongoing/completed status split) for the "OFT - detailed analytics" page's Cost/Quantity/Replications stat cards. Scoped by the Breakdown status filter too (see aggScope); "Not Started" has no rows, so the query is skipped and every sum falls back to 0. */

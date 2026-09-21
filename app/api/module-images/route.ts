@@ -23,7 +23,22 @@ export async function GET() {
 
   const rows = await prisma.moduleImage.findMany({
     where,
-    include: { kvk: { select: { name: true } } },
+    // Only the columns the response below actually reads - this gallery has
+    // no pagination (every row feeds the page's client-side filters and the
+    // "Download By" ZIP, see the module-images view components), so keeping
+    // each row's DB/wire payload small is what keeps it scaling as uploads
+    // grow rather than cutting rows the UI still needs.
+    select: {
+      id: true,
+      kvk: { select: { name: true } },
+      reportingYear: true,
+      activityDate: true,
+      categoryPath: true,
+      categoryLabel: true,
+      caption: true,
+      published: true,
+      imageUrl: true,
+    },
     orderBy: { createdAt: "desc" },
   });
 

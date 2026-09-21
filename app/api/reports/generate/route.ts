@@ -4,7 +4,12 @@ import { requireSession } from "@/lib/api-auth";
 import { buildReportSections } from "@/lib/report-data";
 import { zoneReportLabel } from "@/lib/reports";
 import { reportPeriodLabel } from "@/lib/report-types";
-import { pruneToLeafPaths, pruneToSubsection, reportSubsectionForLeaf } from "@/lib/report-section-map";
+import {
+  pruneToLeafPaths,
+  pruneToSubsection,
+  reportSubsectionForLeaf,
+  type ReportSubsectionRef,
+} from "@/lib/report-section-map";
 import { leafModelFor } from "@/lib/form-summary-data";
 
 /**
@@ -90,20 +95,33 @@ export async function GET(request: Request) {
     }),
   ]);
 
-  let sections = await buildReportSections({
-    kvkId,
-    zoneId: auth.session.zoneId,
-    fromDate,
-    toDate,
-    years: yearsArg,
-    listFilter: listFilterArg,
-  });
+  // Resolve which subsection(s) this request could possibly need *before*
+  // building the report, so a single-form/subsection download doesn't pay
+  // for the other ~100 tables it's just going to prune away (perf fix,
+  // 2026-09-18). `leafRef`/`formRefs` feed buildReportSections' restriction;
+  // the actual pruning below is unchanged.
+  const leafRef = subsectionLeaf ? reportSubsectionForLeaf(subsectionLeaf) : undefined;
+  const formRefs = formPaths.length > 0
+    ? formPaths.map(reportSubsectionForLeaf).filter((r): r is ReportSubsectionRef => !!r)
+    : undefined;
+  const restrictRefs = leafRef ? [leafRef] : formRefs;
+
+  let sections = await buildReportSections(
+    {
+      kvkId,
+      zoneId: auth.session.zoneId,
+      fromDate,
+      toDate,
+      years: yearsArg,
+      listFilter: listFilterArg,
+    },
+    restrictRefs,
+  );
 
   let matched: boolean | undefined;
   if (subsectionLeaf) {
-    const ref = reportSubsectionForLeaf(subsectionLeaf);
-    if (ref) {
-      const pruned = pruneToSubsection(sections, ref, leafModelFor(subsectionLeaf));
+    if (leafRef) {
+      const pruned = pruneToSubsection(sections, leafRef, leafModelFor(subsectionLeaf));
       matched = pruned.length > 0;
       if (matched) sections = pruned;
     } else {

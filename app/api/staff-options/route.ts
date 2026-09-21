@@ -35,6 +35,7 @@ export async function GET(request: Request) {
   const rows = await prisma.staff.findMany({
     where: {
       ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }),
+      dateOfRetirement: null,
       ...(role === "sms-head" ? { sanctionedPost: { in: SMS_HEAD_POSTS } } : {}),
     },
     orderBy: { name: "asc" },

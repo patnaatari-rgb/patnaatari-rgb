@@ -7,7 +7,7 @@ export type TrackedLeaf = {
   topSection: string;
   model: string;
   /** SwachhtaObservance backs both "Sewa" and "Pakhwada" (kind enum), so those two leaves each need a real extra filter, not a plain per-model groupBy - every other leaf here has one model to itself. */
-  extraWhere?: Record<string, string>;
+  extraWhere?: Record<string, unknown>;
   /** StaffTransfer has no plain `kvkId` - the transfer is owned by the KVK the staff left, so it groups by `fromKvkId` (matches the Staff Transferred list + report, which scope the same way). Every other leaf here groups by `kvkId`. */
   kvkField?: "kvkId" | "fromKvkId";
   /**
@@ -75,6 +75,17 @@ const MODEL_YEAR_FIELD: Record<string, { field: string; kind: "int" | "date" }> 
   nicraConvergenceProgramme: { field: "startDate", kind: "date" },
   nicraDignitaryVisit: { field: "dateOfVisit", kind: "date" },
   nicraPiCoPi: { field: "startDate", kind: "date" },
+  cfldProjectTeam: { field: "startDate", kind: "date" },
+  aryaProjectTeam: { field: "startDate", kind: "date" },
+  nfProjectTeam: { field: "startDate", kind: "date" },
+  tspScspProjectTeam: { field: "startDate", kind: "date" },
+  nariProjectTeam: { field: "startDate", kind: "date" },
+  seedHubProjectTeam: { field: "startDate", kind: "date" },
+  agriDroneProjectTeam: { field: "startDate", kind: "date" },
+  fpoProjectTeam: { field: "startDate", kind: "date" },
+  drmrProjectTeam: { field: "startDate", kind: "date" },
+  craProjectTeam: { field: "startDate", kind: "date" },
+  csisaProjectTeam: { field: "startDate", kind: "date" },
   aryaCurrentYearDetail: { field: "startDate", kind: "date" },
   nfGeographicalInfo: { field: "startDate", kind: "date" },
   agriDroneDemonstration: { field: "dateOfDemos", kind: "date" },
@@ -127,7 +138,7 @@ export function yearsWhereFor(model: string, years: number[]): Record<string, un
  * for a bespoke Create flow instead (CFLD Technical Parameter, Technology
  * Week Celebration, World Soil Day) - each still backed by one real model.
  */
-const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string, string>; kvkField?: "kvkId" | "fromKvkId" }> = {
+const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string, unknown>; kvkField?: "kvkId" | "fromKvkId" }> = {
   "about-kvk/basic/bank-account-details": { model: "bankAccount" },
   "about-kvk/employee/staff-transferred": { model: "staffTransfer", kvkField: "fromKvkId" },
   "about-kvk/land-infrastructure/infrastructure-details": { model: "infrastructure" },
@@ -137,7 +148,9 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   "about-kvk/vehicles/vehicle-details": { model: "vehicleStatus" },
   "about-kvk/equipments/view-equipments": { model: "equipment" },
   "about-kvk/equipments/equipment-details": { model: "equipmentStatus" },
-  "about-kvk/employee/employee-details": { model: "staff" },
+  // Retired staff leave Employee Details and are counted under Staff Retired instead.
+  "about-kvk/employee/employee-details": { model: "staff", extraWhere: { dateOfRetirement: null } },
+  "about-kvk/employee/staff-retired": { model: "staff", extraWhere: { dateOfRetirement: { not: null } } },
   "achievements/oft": { model: "oft" },
   "achievements/front-line-demonstration/view-fld": { model: "fld" },
   "achievements/front-line-demonstration/fld-extension-training": { model: "fldExtensionTraining" },
@@ -168,6 +181,7 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   "projects/cfld/extension-activity-cfld": { model: "cfldExtensionActivity" },
   "projects/cfld/budget-utilization": { model: "cfldBudgetUtilization" },
   "projects/cfld/crop-wise-images": { model: "cfldCropWiseImage" },
+  "projects/cfld/cfld-team": { model: "cfldProjectTeam" },
   "projects/nicra/basic-information": { model: "nicraBasicInformation" },
   "projects/nicra/details": { model: "nicraDetails" },
   "projects/nicra/training": { model: "nicraTraining" },
@@ -182,6 +196,7 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   "projects/nicra/others/pi-co-pi-list": { model: "nicraPiCoPi" },
   "projects/arya-safal/arya-safal-current-year": { model: "aryaCurrentYearDetail" },
   "projects/arya-safal/arya-safal-previous-year": { model: "aryaPreviousYearEvaluation" },
+  "projects/arya-safal/arya-team": { model: "aryaProjectTeam" },
   "projects/natural-farming/nf-geographical": { model: "nfGeographicalInfo" },
   "projects/natural-farming/nf-physical": { model: "nfPhysicalInfo" },
   "projects/natural-farming/nf-demonstration": { model: "nfDemonstrationInfo" },
@@ -189,22 +204,31 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   "projects/natural-farming/nf-beneficiaries": { model: "nfBeneficiary" },
   "projects/natural-farming/nf-soil-data": { model: "nfSoilData" },
   "projects/natural-farming/nf-budget-expenditure": { model: "nfBudgetExpenditure" },
+  "projects/natural-farming/nf-team": { model: "nfProjectTeam" },
   "projects/tsp-scsp/view-sub-plan-activity": { model: "subPlanActivity" },
+  "projects/tsp-scsp/tsp-scsp-team": { model: "tspScspProjectTeam" },
   "projects/nari/nari-nutrition-garden": { model: "nariNutritionGarden" },
   "projects/nari/nari-bio-fortified": { model: "nariBioFortified" },
   "projects/nari/nari-value-addition": { model: "nariValueAddition" },
   "projects/nari/nari-training": { model: "nariTraining" },
   "projects/nari/nari-extension": { model: "nariExtension" },
+  "projects/nari/nari-team": { model: "nariProjectTeam" },
   "projects/agri-drone/agri-drone-introduction": { model: "agriDroneIntroduction" },
   "projects/agri-drone/agri-drone-demonstration": { model: "agriDroneDemonstration" },
+  "projects/agri-drone/agri-drone-team": { model: "agriDroneProjectTeam" },
   "projects/fpo-cbbo/fpo-cbbo-details": { model: "fpoCbboDetail" },
   "projects/fpo-cbbo/fpo-management": { model: "fpoManagement" },
+  "projects/fpo-cbbo/fpo-team": { model: "fpoProjectTeam" },
   "projects/drmr/drmr-details": { model: "drmrDetail" },
   "projects/drmr/drmr-activity": { model: "drmrActivity" },
+  "projects/drmr/drmr-team": { model: "drmrProjectTeam" },
   "projects/cra/cra-details": { model: "craDetail" },
   "projects/cra/cra-extension-activity": { model: "craExtensionActivity" },
+  "projects/cra/cra-team": { model: "craProjectTeam" },
   "projects/csisa/csisa-details": { model: "csisaDetail" },
+  "projects/csisa/csisa-team": { model: "csisaProjectTeam" },
   "projects/seed-hub/seed-hub-program": { model: "seedHubProgram" },
+  "projects/seed-hub/seed-hub-team": { model: "seedHubProjectTeam" },
   "projects/other-programmes/other-programme": { model: "otherProgramme" },
   "performance/impact/impact-of-kvk-activities": { model: "kvkActivityImpact" },
   "performance/impact/entrepreneurship-details": { model: "entrepreneurshipDetail" },

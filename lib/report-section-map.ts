@@ -30,6 +30,7 @@ export const REPORT_SUBSECTION_BY_LEAF: Record<string, ReportSubsectionRef> = {
   "about-kvk/basic/bank-account-details": GT(["1.1"], "Basic Information", "Basic Information", "Bank Account Details"),
   "about-kvk/employee/employee-details": GT(["1.2"], "Employee Information", "Employee Information", "All KVK Staff"),
   "about-kvk/employee/staff-transferred": GT(["1.2"], "Employee Information", "Employee Information", "Staff Transferred"),
+  "about-kvk/employee/staff-retired": GT(["1.2"], "Employee Information", "Employee Information", "Staff Retired"),
   // Each narrows to its own table inside subsection 1.3 - a download from
   // one of these leaves used to dump the entire "Land & Infrastructure"
   // subsection (Infrastructure + Land + Staff Quarters together), so e.g.
@@ -72,6 +73,7 @@ export const REPORT_SUBSECTION_BY_LEAF: Record<string, ReportSubsectionRef> = {
   "projects/cfld/extension-activity-cfld": G(["3.1"], "CFLD", "CFLD"),
   "projects/cfld/budget-utilization": G(["3.1"], "CFLD", "CFLD"),
   "projects/cfld/crop-wise-images": G(["3.1"], "CFLD", "CFLD"),
+  "projects/cfld/cfld-team": G(["3.1"], "CFLD", "CFLD"),
   "projects/nicra/basic-information": G(["3.2"], "NICRA", "NICRA"),
   "projects/nicra/details": G(["3.2"], "NICRA", "NICRA"),
   "projects/nicra/training": G(["3.2"], "NICRA", "NICRA"),
@@ -86,6 +88,7 @@ export const REPORT_SUBSECTION_BY_LEAF: Record<string, ReportSubsectionRef> = {
   "projects/nicra/others/pi-co-pi-list": G(["3.3"], "NICRA Others", "NICRA Others"),
   "projects/arya-safal/arya-safal-current-year": G(["3.4"], "ARYA", "ARYA / SARAL"),
   "projects/arya-safal/arya-safal-previous-year": G(["3.4"], "ARYA", "ARYA / SARAL"),
+  "projects/arya-safal/arya-team": G(["3.4"], "ARYA", "ARYA / SARAL"),
   "projects/natural-farming/nf-geographical": G(["3.5"], "Natural Farming", "Natural Farming"),
   "projects/natural-farming/nf-physical": G(["3.5"], "Natural Farming", "Natural Farming"),
   "projects/natural-farming/nf-demonstration": G(["3.5"], "Natural Farming", "Natural Farming"),
@@ -93,22 +96,31 @@ export const REPORT_SUBSECTION_BY_LEAF: Record<string, ReportSubsectionRef> = {
   "projects/natural-farming/nf-beneficiaries": G(["3.5"], "Natural Farming", "Natural Farming"),
   "projects/natural-farming/nf-soil-data": G(["3.5"], "Natural Farming", "Natural Farming"),
   "projects/natural-farming/nf-budget-expenditure": G(["3.5"], "Natural Farming", "Natural Farming"),
+  "projects/natural-farming/nf-team": G(["3.5"], "Natural Farming", "Natural Farming"),
   "projects/tsp-scsp/view-sub-plan-activity": G(["3.6"], "TSP/SCSP", "TSP/SCSP"),
+  "projects/tsp-scsp/tsp-scsp-team": G(["3.6"], "TSP/SCSP", "TSP/SCSP"),
   "projects/nari/nari-nutrition-garden": G(["3.7"], "NARI", "NARI"),
   "projects/nari/nari-bio-fortified": G(["3.7"], "NARI", "NARI"),
   "projects/nari/nari-value-addition": G(["3.7"], "NARI", "NARI"),
   "projects/nari/nari-training": G(["3.7"], "NARI", "NARI"),
   "projects/nari/nari-extension": G(["3.7"], "NARI", "NARI"),
+  "projects/nari/nari-team": G(["3.7"], "NARI", "NARI"),
   "projects/agri-drone/agri-drone-introduction": G(["3.8"], "Agri-Drone", "Agri-Drone"),
   "projects/agri-drone/agri-drone-demonstration": G(["3.8"], "Agri-Drone", "Agri-Drone"),
+  "projects/agri-drone/agri-drone-team": G(["3.8"], "Agri-Drone", "Agri-Drone"),
   "projects/fpo-cbbo/fpo-cbbo-details": G(["3.9"], "FPO and CBBO", "FPO and CBBO"),
   "projects/fpo-cbbo/fpo-management": G(["3.9"], "FPO and CBBO", "FPO and CBBO"),
+  "projects/fpo-cbbo/fpo-team": G(["3.9"], "FPO and CBBO", "FPO and CBBO"),
   "projects/drmr/drmr-details": G(["3.10"], "DRMR", "DRMR"),
   "projects/drmr/drmr-activity": G(["3.10"], "DRMR", "DRMR"),
+  "projects/drmr/drmr-team": G(["3.10"], "DRMR", "DRMR"),
   "projects/cra/cra-details": G(["3.11"], "Climate Resilient Agriculture", "Climate Resilient Agriculture (CRA)"),
   "projects/cra/cra-extension-activity": G(["3.11"], "Climate Resilient Agriculture", "Climate Resilient Agriculture (CRA)"),
+  "projects/cra/cra-team": G(["3.11"], "Climate Resilient Agriculture", "Climate Resilient Agriculture (CRA)"),
   "projects/csisa/csisa-details": G(["3.12"], "CSISA", "CSISA"),
+  "projects/csisa/csisa-team": G(["3.12"], "CSISA", "CSISA"),
   "projects/seed-hub/seed-hub-program": G(["3.13"], "Seed Hub Program", "Seed Hub Program"),
+  "projects/seed-hub/seed-hub-team": G(["3.13"], "Seed Hub Program", "Seed Hub Program"),
   "projects/other-programmes/other-programme": G(["3.14"], "Other Programmes", "Other Programmes"),
 
   // 4. Performance
@@ -157,6 +169,41 @@ export const REPORT_SUBSECTION_BY_LEAF: Record<string, ReportSubsectionRef> = {
 
 export function reportSubsectionForLeaf(recordPath: string | undefined): ReportSubsectionRef | undefined {
   return recordPath ? REPORT_SUBSECTION_BY_LEAF[recordPath] : undefined;
+}
+
+/**
+ * Which `${secIdx}-${subIdx}` positions in a section tree any of `refs`
+ * could possibly resolve to (title-or-num match, same predicate
+ * `pruneToSubsection`/`pruneToLeafPaths` apply after the fact). Used to skip
+ * fetching the ~100+ tables a full report build fires when the caller only
+ * wants one form/subsection's worth (see buildReportSections's `restrictRefs`
+ * - perf fix, 2026-09-18: a single-form report download used to run the
+ * entire report's DB fan-out and throw away everything but one subsection).
+ *
+ * Deliberately an OR across title-match and num-match (never the "title
+ * first, else num" narrowing pruneToSubsection itself does) so this is
+ * always a superset of what pruning could ever keep - it only ever skips
+ * fetching a table that pruning was guaranteed to discard anyway. Returns an
+ * empty set when `refs` matches nothing in this tree, which callers must
+ * treat as "don't restrict" (an empty restriction would wrongly stub out a
+ * report that then falls back to being served unpruned).
+ */
+export function subsectionsMatchingRefs(
+  tree: { subs: { num: string; title: string }[] }[],
+  refs: ReportSubsectionRef[],
+): Set<string> {
+  const keep = new Set<string>();
+  tree.forEach((sec, secIdx) => {
+    sec.subs.forEach((sub, subIdx) => {
+      const matches = refs.some(
+        (ref) =>
+          (!!ref.titleIncludes && sub.title.toLowerCase().includes(ref.titleIncludes.toLowerCase())) ||
+          ref.nums.includes(sub.num),
+      );
+      if (matches) keep.add(`${secIdx}-${subIdx}`);
+    });
+  });
+  return keep;
 }
 
 type SubLike = { num: string; title: string; tables?: { code: string; title: string; model?: string }[] };

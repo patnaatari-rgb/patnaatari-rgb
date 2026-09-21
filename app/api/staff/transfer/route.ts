@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
   try {
     const staff = await prisma.staff.findFirst({
-      where: { id: staffId, ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }) },
+      where: { id: staffId, dateOfRetirement: null, ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }) },
       select: { id: true, kvkId: true, name: true, kvk: { select: { name: true } } },
     });
     if (!staff) {

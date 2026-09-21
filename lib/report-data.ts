@@ -27,7 +27,13 @@ export {
 } from "./report-types";
 
 import type { ReportBlock, ReportBlockPart, ReportColumn, ReportGrid, ReportImage, ReportScope, ReportSection, ReportTable } from "./report-types";
-import { REPORT_SUBSECTION_BY_LEAF, reportSubsectionForLeaf, subsectionMatchesRef } from "./report-section-map";
+import {
+  REPORT_SUBSECTION_BY_LEAF,
+  reportSubsectionForLeaf,
+  subsectionMatchesRef,
+  subsectionsMatchingRefs,
+  type ReportSubsectionRef,
+} from "./report-section-map";
 
 function humanize(key: string) {
   return key
@@ -72,7 +78,7 @@ const MODEL_FIELDS: Record<string, string[]> = {
   extensionActivity: ["reportingYear", "startDate", "endDate", "natureOfExtensionActivity", "noOfActivities", "noOfParticipants", "staff", "farmersGeneralMale", "farmersGeneralFemale", "farmersObcMale", "farmersObcFemale", "farmersScMale", "farmersScFemale", "farmersStMale", "farmersStFemale", "officialsGeneralMale", "officialsGeneralFemale", "officialsObcMale", "officialsObcFemale", "officialsScMale", "officialsScFemale", "officialsStMale", "officialsStFemale"],
   otherExtensionActivity: ["reportingYear", "natureOfExtensionActivity", "noOfActivities", "staff", "startDate", "endDate"],
   technologyWeekCelebration: ["startDate", "endDate", "typeOfActivities", "noOfActivities", "relatedCropTechnology", "numberOfParticipants", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
-  celebrationDay: ["importantDay", "eventDate", "noOfActivities", "farmersGeneralMale", "farmersGeneralFemale", "farmersObcMale", "farmersObcFemale", "farmersScMale", "farmersScFemale", "farmersStMale", "farmersStFemale", "officialsGeneralMale", "officialsGeneralFemale", "officialsObcMale", "officialsObcFemale", "officialsScMale", "officialsScFemale", "officialsStMale", "officialsStFemale"],
+  celebrationDay: ["importantDay", "startDate", "endDate", "noOfActivities", "farmersGeneralMale", "farmersGeneralFemale", "farmersObcMale", "farmersObcFemale", "farmersScMale", "farmersScFemale", "farmersStMale", "farmersStFemale", "officialsGeneralMale", "officialsGeneralFemale", "officialsObcMale", "officialsObcFemale", "officialsScMale", "officialsScFemale", "officialsStMale", "officialsStFemale", "vipGeneralMale", "vipGeneralFemale", "vipObcMale", "vipObcFemale", "vipScMale", "vipScFemale", "vipStMale", "vipStFemale", "vipNameDesignationAddress"],
   worldSoilDay: ["reportingYear", "noOfActivitiesConducted", "soilHealthCardsDistributed", "noOfVip", "vipNames", "totalParticipants", "generalMale", "generalFemale", "obcMale", "obcFemale", "scMale", "scFemale", "stMale", "stFemale"],
   poshanMaaha: ["activityDate", "activitiesConducted", "eventName", "saplingsPlanted", "vegetableKits", "participantsGirls", "participantsPublicRepresentatives", "participantsFarmWoman", "participantsFarmers", "participantsAganwadiWorkers", "participantsGovtOfficials", "totalParticipants"],
   swachhtaObservance: ["kind", "fromDate", "toDate", "totalNoOfActivitiesUndertaken", "noOfStaffs", "noOfFarmers"],
@@ -100,6 +106,18 @@ const MODEL_FIELDS: Record<string, string[]> = {
   nicraConvergenceProgramme: ["startDate", "endDate", "scheme", "natureOfWork", "amount"],
   nicraDignitaryVisit: ["vipExperts", "name", "dateOfVisit"],
   nicraPiCoPi: ["startDate", "endDate", "piCoPi", "name"],
+  /** Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon") - same shape across all 8 Project sections that got this addon. */
+  aryaProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  nfProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  tspScspProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  agriDroneProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  fpoProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  drmrProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  craProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  csisaProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  cfldProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  nariProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
+  seedHubProjectTeam: ["startDate", "endDate", "projectTeam", "name"],
   aryaCurrentYearDetail: ["enterprise", "viableUnits", "closedUnits", "startDate", "endDate", "groupsFormed", "groupsActive"],
   aryaPreviousYearEvaluation: ["enterprise", "totalClosed", "closingDate", "totalRestarted", "restartedDate"],
   nfGeographicalInfo: ["startDate", "endDate", "agroClimaticZone", "farmingSituation", "latitude", "longitude"],
@@ -205,6 +223,8 @@ const MODEL_PERIOD_YEAR_FIELD: Record<string, string> = {
  */
 const MODEL_PERIOD_DATE_FIELDS: Record<string, string[]> = {
   staffTransfer: ["transferDate"],
+  /** Not a real model: the 1.2.C "Staff Retired" table reads Staff rows, bounded by their date of retirement (Staff itself is a roster table with no period bound). */
+  staffRetired: ["dateOfRetirement"],
   oft: ["startMonth", "endMonth"],
   fld: ["startDate", "endDate"],
   fldExtensionTraining: ["date"],
@@ -212,7 +232,7 @@ const MODEL_PERIOD_DATE_FIELDS: Record<string, string[]> = {
   extensionActivity: ["startDate", "endDate"],
   otherExtensionActivity: ["startDate", "endDate"],
   technologyWeekCelebration: ["startDate", "endDate"],
-  celebrationDay: ["eventDate"],
+  celebrationDay: ["startDate", "endDate"],
   poshanMaaha: ["activityDate"],
   technologyProductProduction: ["reportingDate"],
   soilWaterPlantAnalysis: ["startDate", "endDate"],
@@ -232,6 +252,17 @@ const MODEL_PERIOD_DATE_FIELDS: Record<string, string[]> = {
   nicraConvergenceProgramme: ["startDate", "endDate"],
   nicraDignitaryVisit: ["dateOfVisit"],
   nicraPiCoPi: ["startDate", "endDate"],
+  aryaProjectTeam: ["startDate", "endDate"],
+  nfProjectTeam: ["startDate", "endDate"],
+  tspScspProjectTeam: ["startDate", "endDate"],
+  agriDroneProjectTeam: ["startDate", "endDate"],
+  fpoProjectTeam: ["startDate", "endDate"],
+  drmrProjectTeam: ["startDate", "endDate"],
+  craProjectTeam: ["startDate", "endDate"],
+  csisaProjectTeam: ["startDate", "endDate"],
+  cfldProjectTeam: ["startDate", "endDate"],
+  nariProjectTeam: ["startDate", "endDate"],
+  seedHubProjectTeam: ["startDate", "endDate"],
   aryaCurrentYearDetail: ["startDate", "endDate"],
   aryaPreviousYearEvaluation: ["closingDate", "restartedDate"],
   nfGeographicalInfo: ["startDate", "endDate"],
@@ -1702,7 +1733,7 @@ const CASTE_SELECT = {
 } as const;
 
 /** Re-keys a record's prefixed caste block (farmersGeneralMale.. / officialsGeneralMale..) into the plain CasteRecord shape casteMftRow expects. */
-function prefixedCaste(r: Record<string, unknown>, prefix: "farmers" | "officials"): CasteRecord {
+function prefixedCaste(r: Record<string, unknown>, prefix: "farmers" | "officials" | "vip"): CasteRecord {
   const g = (suffix: string) => Number(r[`${prefix}${suffix}`] ?? 0);
   return {
     generalMale: g("GeneralMale"), generalFemale: g("GeneralFemale"),
@@ -1716,6 +1747,11 @@ const DOUBLE_CASTE_SELECT = {
   farmersScMale: true, farmersScFemale: true, farmersStMale: true, farmersStFemale: true,
   officialsGeneralMale: true, officialsGeneralFemale: true, officialsObcMale: true, officialsObcFemale: true,
   officialsScMale: true, officialsScFemale: true, officialsStMale: true, officialsStFemale: true,
+} as const;
+/** CelebrationDay's own third beneficiary block (client pointer, 2026-09-15) - kept separate from DOUBLE_CASTE_SELECT above since that constant is shared with models (ExtensionActivity) that have no `vip*` columns; spreading it there would break their own select. */
+const VIP_CASTE_SELECT = {
+  vipGeneralMale: true, vipGeneralFemale: true, vipObcMale: true, vipObcFemale: true,
+  vipScMale: true, vipScFemale: true, vipStMale: true, vipStFemale: true,
 } as const;
 
 /**
@@ -2198,7 +2234,7 @@ async function buildCelebrationDays(scope: ReportScope): Promise<CustomTableResu
   if (scope.kvkId) {
     const rows = await prisma.celebrationDay.findMany({
       where: { kvkId: scope.kvkId },
-      select: { importantDay: true, noOfActivities: true, ...DOUBLE_CASTE_SELECT, kvk: { select: { name: true } } },
+      select: { importantDay: true, noOfActivities: true, ...DOUBLE_CASTE_SELECT, ...VIP_CASTE_SELECT, kvk: { select: { name: true } } },
     });
     if (rows.length === 0) return {};
     type KR = (typeof rows)[number];
@@ -2207,18 +2243,22 @@ async function buildCelebrationDays(scope: ReportScope): Promise<CustomTableResu
       { key: "acts", label: "No. of activities" },
       ...casteMftColumns("Farmers", { keyPrefix: "f", withGrand: false }),
       ...casteMftColumns("Extension Officials", { keyPrefix: "o", withGrand: false }),
+      /** Client pointer, 2026-09-15: new third beneficiary category, appended after the existing super-v2-prod.pdf columns rather than inserted between them. */
+      ...casteMftColumns("Public Representative/VIP", { keyPrefix: "v", withGrand: false }),
       ...(["M", "F", "T"] as const).map((g) => ({ key: `tot${g}`, label: g, groups: ["Total"] })),
     ];
     const rowFor = (list: KR[]) => {
       const f = casteMftRow(list.map((r) => prefixedCaste(r as Record<string, unknown>, "farmers")), "f");
       const o = casteMftRow(list.map((r) => prefixedCaste(r as Record<string, unknown>, "officials")), "o");
+      const vp = casteMftRow(list.map((r) => prefixedCaste(r as Record<string, unknown>, "vip")), "v");
       return {
         acts: String(list.reduce((s, r) => s + r.noOfActivities, 0)),
         ...f,
         ...o,
-        totM: String(Number(f.fgrandM) + Number(o.ograndM)),
-        totF: String(Number(f.fgrandF) + Number(o.ograndF)),
-        totT: String(Number(f.fgrandT) + Number(o.ograndT)),
+        ...vp,
+        totM: String(Number(f.fgrandM) + Number(o.ograndM) + Number(vp.vgrandM)),
+        totF: String(Number(f.fgrandF) + Number(o.ograndF) + Number(vp.vgrandF)),
+        totT: String(Number(f.fgrandT) + Number(o.ograndT) + Number(vp.vgrandT)),
       };
     };
     const kvkName = rows[0].kvk.name;
@@ -2238,6 +2278,7 @@ async function buildCelebrationDays(scope: ReportScope): Promise<CustomTableResu
         noOfActivities: true,
         kvkId: true,
         ...DOUBLE_CASTE_SELECT,
+        ...VIP_CASTE_SELECT,
         kvk: { select: { state: { select: { name: true } } } },
       },
     }),
@@ -2257,8 +2298,9 @@ async function buildCelebrationDays(scope: ReportScope): Promise<CustomTableResu
   const participants = (r: R) => {
     const f = prefixedCaste(r as unknown as Record<string, unknown>, "farmers");
     const o = prefixedCaste(r as unknown as Record<string, unknown>, "officials");
+    const vp = prefixedCaste(r as unknown as Record<string, unknown>, "vip");
     const sum = (x: CasteRecord) => x.generalMale + x.generalFemale + x.obcMale + x.obcFemale + x.scMale + x.scFemale + x.stMale + x.stFemale;
-    return sum(f) + sum(o);
+    return sum(f) + sum(o) + sum(vp);
   };
   const cellsFor = (list: R[]) => {
     const out: Record<string, string> = {};
@@ -3279,12 +3321,12 @@ type Sec = { num: string; title: string; subs: Sub[] };
 function kvkOwnedTable(
   model: string,
   fieldColumns: ReportColumn[],
-  opts: { kvkLabel?: string; totalField?: string; totalLabel?: string } = {},
+  opts: { kvkLabel?: string; totalField?: string; totalLabel?: string; where?: Record<string, unknown> } = {},
 ) {
   return async (scope: ReportScope): Promise<CustomTableResult> => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const records: Record<string, any>[] = await (prisma as any)[model].findMany({
-      where: scopeAndPeriod(scope, model),
+      where: { ...scopeAndPeriod(scope, model), ...opts.where },
       include: { kvk: { select: { name: true } } },
       orderBy: { kvk: { name: "asc" } },
       take: 5000,
@@ -3395,6 +3437,34 @@ async function buildStaffTransferred(scope: ReportScope): Promise<CustomTableRes
     to: t.toKvk?.name ?? "",
     date: stringifyValue(t.transferDate),
     count: String(t.numberOfTransfers),
+  }));
+  return { columns, rows };
+}
+
+/** 1.2.C "Staff Retired" - staff whose Employee Details row was marked Retired (Staff.dateOfRetirement set). Retired staff are excluded from 1.2.A, so this is the only place they appear in the report. */
+async function buildStaffRetired(scope: ReportScope): Promise<CustomTableResult> {
+  const staff = await prisma.staff.findMany({
+    where: {
+      dateOfRetirement: { not: null },
+      ...(scope.kvkId ? { kvkId: scope.kvkId } : { zoneId: scope.zoneId }),
+      ...periodClause(scope, "staffRetired"),
+    },
+    include: { kvk: { select: { name: true } } },
+    orderBy: [{ kvk: { name: "asc" } }, { dateOfRetirement: "asc" }],
+  });
+  const columns: ReportColumn[] = [
+    { key: "kvk", label: "KVK Name" },
+    { key: "name", label: "Name", listKey: "staffName" },
+    { key: "position", label: "Position" },
+    { key: "sanctionedPost", label: "Sanctioned Post" },
+    { key: "dateOfRetirement", label: "Date of Retirement" },
+  ];
+  const rows = staff.map((s) => ({
+    kvk: s.kvk?.name ?? "",
+    name: s.name,
+    position: s.position ?? "",
+    sanctionedPost: s.sanctionedPost,
+    dateOfRetirement: stringifyValue(s.dateOfRetirement),
   }));
   return { columns, rows };
 }
@@ -3779,7 +3849,7 @@ async function buildDistrictLevelData(scope: ReportScope): Promise<CustomTableRe
           kind: "grid", noSerial: false,
           columns: [
             { key: "month", label: "Month" }, { key: "rain", label: "Rainfall(mm)" },
-            { key: "maxT", label: "Max. Temp. (0C)" }, { key: "minT", label: "Min. Temp. (0C)" },
+            { key: "maxT", label: "Max. Temp. (°C)" }, { key: "minT", label: "Min. Temp. (°C)" },
             { key: "maxRh", label: "Max. R.H. (%)" }, { key: "minRh", label: "Min. R.H. (%)" }, { key: "remarks", label: "Remarks" },
           ],
           rows: weather.map((r) => ({
@@ -4125,7 +4195,7 @@ const SECTION_456_BUILDERS: Record<string, (scope: ReportScope) => Promise<Custo
     caption: "Utilization of Hostel Facilities Accommodation Available(No. of Beds)",
     columns: [
       { key: "months", label: "Months" }, { key: "traineesStayed", label: "No. of Trainees Stayed" },
-      { key: "traineeDays", label: "Trainee Days(Days Stayed)" }, { key: "reasonForShortFall", label: "Reason for Short Fall(if any)" },
+      { key: "traineeDays", label: "Trainee Days(Days Stayed)" }, { key: "reasonForShortFall", label: "Reason for Shortfall(if any)" },
     ],
   }),
   rainWaterHarvesting: flatReportTable({
@@ -4565,6 +4635,51 @@ async function buildNicraPiCoPi(scope: ReportScope): Promise<CustomTableResult> 
     ],
   }));
   return { blocks };
+}
+
+/**
+ * Client pointer, 2026-09-15 ("All Projects - New 'Team' Addon") - per-KVK
+ * Team list, same shape as NICRA's own "PI/Co-PI List" above
+ * (buildNicraPiCoPi) - one factory reused across every Project section
+ * that has this addon (only Other Programmes, the last section, is
+ * excluded per the client's own request; NICRA already has its own equivalent).
+ */
+function buildProjectTeam(modelKey: string) {
+  return async (scope: ReportScope): Promise<CustomTableResult> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const delegate = (prisma as any)[modelKey];
+    const rawRecords: { startDate: Date; endDate: Date; projectTeam: string; name: string; kvk: { name: string } }[] =
+      await delegate.findMany({
+        where: scopeAndPeriod(scope, modelKey),
+        include: { kvk: { select: { name: true } } },
+        orderBy: [{ kvkId: "asc" }, { startDate: "asc" }],
+      });
+    const records = applyListFilter(rawRecords, scope, {
+      startDate: (r) => r.startDate.toISOString().slice(0, 10),
+      endDate: (r) => r.endDate.toISOString().slice(0, 10),
+      kvk: (r) => r.kvk.name,
+      projectTeam: (r) => r.projectTeam,
+      name: (r) => r.name,
+    });
+    const columns: ReportColumn[] = [
+      { key: "role", label: "Project Team" },
+      { key: "name", label: "Name" },
+      { key: "start", label: "Start date" },
+      { key: "end", label: "End date" },
+    ];
+    if (records.length === 0) return { columns, keepEmpty: true };
+    const blocks: ReportBlock[] = [...groupInto(records, (r) => r.kvk.name).entries()].map(([kvkName, list]) => ({
+      heading: kvkName,
+      parts: [
+        {
+          kind: "grid" as const,
+          columns,
+          rows: list.map((r) => ({ role: r.projectTeam, name: r.name, start: stringifyValue(r.startDate), end: stringifyValue(r.endDate) })),
+        },
+      ],
+    }));
+    return { blocks };
+  };
 }
 
 /**
@@ -5440,10 +5555,10 @@ async function buildNicraBasicInfo(scope: ReportScope): Promise<CustomTableResul
       { key: "reportingDate", label: "Reporting Date", groups: [PD] },
       { key: "startDate", label: "Start Date", groups: [PD] },
       { key: "endDate", label: "End Date", groups: [PD] },
-      { key: "rfNormal", label: "RF (mm) district Normal", groups: [DD] },
-      { key: "rfReceived", label: "RF (mm) district Received", groups: [DD] },
-      { key: "tMax", label: "Temperature 0C Max.", groups: [DD] },
-      { key: "tMin", label: "Temperature 0C Min.", groups: [DD] },
+      { key: "rfNormal", label: "District Normal Rainfall (mm)", groups: [DD] },
+      { key: "rfReceived", label: "District Received Rainfall (mm)", groups: [DD] },
+      { key: "tMax", label: "Max. Temperature (°C)", groups: [DD] },
+      { key: "tMin", label: "Min. Temperature (°C)", groups: [DD] },
       { key: "d10", label: "> 10 days", groups: [DS] },
       { key: "d15", label: "> 15 days", groups: [DS] },
       { key: "d20", label: "> 20 days", groups: [DS] },
@@ -6028,16 +6143,18 @@ async function buildNfSoilData(scope: ReportScope): Promise<CustomTableResult> {
 async function buildNfBudgetExpenditure(scope: ReportScope): Promise<CustomTableResult> {
   const records = await prisma.nfBudgetExpenditure.findMany({
     where: scopeAndPeriod(scope, "nfBudgetExpenditure"),
-    select: { activityName: true, activitiesOrganised: true, budgetSanction: true, budgetExpenditure: true, totalBudgetExpenditure: true },
+    select: { activityName: true, activitiesOrganised: true, budgetSanction: true, budgetExpenditure: true, totalBudgetExpenditure: true, balance: true },
     orderBy: { activityName: "asc" },
   });
   const num = (v: unknown) => Number(v ?? 0);
   const columns: ReportColumn[] = [
     { key: "activity", label: "Name of activity" },
     { key: "count", label: "Number of activities organized" },
-    { key: "sanction", label: "Budget sanction (Rs)" },
+    { key: "sanction", label: "Budget Receipt (Rs)" },
     { key: "expenditure", label: "Budget expenditure (Rs)" },
     { key: "total", label: "Total Budget Expenditure (Rs)" },
+    /** Client pointer, 2026-09-15: new auto-calculated Balance = Budget Receipt - Budget Expenditure, appended after the existing super-v2-prod.pdf columns rather than inserted between them. */
+    { key: "balance", label: "Balance (Rs)" },
   ];
   if (records.length === 0) return { columns, noSerial: true, keepEmpty: true };
   return {
@@ -6049,6 +6166,7 @@ async function buildNfBudgetExpenditure(scope: ReportScope): Promise<CustomTable
       sanction: String(num(r.budgetSanction)),
       expenditure: String(num(r.budgetExpenditure)),
       total: String(num(r.totalBudgetExpenditure)),
+      balance: String(num(r.balance)),
     })),
     totalRow: {
       activity: "Total",
@@ -6056,6 +6174,7 @@ async function buildNfBudgetExpenditure(scope: ReportScope): Promise<CustomTable
       sanction: String(records.reduce((a, r) => a + num(r.budgetSanction), 0)),
       expenditure: String(records.reduce((a, r) => a + num(r.budgetExpenditure), 0)),
       total: String(records.reduce((a, r) => a + num(r.totalBudgetExpenditure), 0)),
+      balance: String(records.reduce((a, r) => a + num(r.balance), 0)),
     },
   };
 }
@@ -6432,6 +6551,7 @@ const PROJECTS_SECTION: Sec = {
         { code: "3.1.A", title: "Technical Parameter", model: "cfldTechnicalParameter", scope: "direct" },
         { code: "3.1.B", title: "Extension Activity", model: "cfldExtensionActivity", scope: "direct", custom: buildCfldExtensionActivity },
         { code: "3.1.C", title: "Budget Utilization", model: "cfldBudgetUtilization", scope: "direct", custom: buildCfldBudgetUtilization },
+        { code: "3.1.D", title: "Team", model: "cfldProjectTeam", scope: "direct", custom: buildProjectTeam("cfldProjectTeam") },
       ]},
       { num: "3.2", title: "NICRA", items: [
         { code: "3.2.A", title: "Basic Information", model: "nicraBasicInformation", scope: "direct" },
@@ -6452,6 +6572,7 @@ const PROJECTS_SECTION: Sec = {
       { num: "3.4", title: "ARYA / SARAL", items: [
         { code: "3.4.A", title: "Current Year Details", model: "aryaCurrentYearDetail", scope: "direct" },
         { code: "3.4.B", title: "Previous Year Evaluation", model: "aryaPreviousYearEvaluation", scope: "direct" },
+        { code: "3.4.C", title: "Team", model: "aryaProjectTeam", scope: "direct", custom: buildProjectTeam("aryaProjectTeam") },
       ]},
       { num: "3.5", title: "Natural Farming", items: [
         { code: "3.5.A", title: "Geographical Information", model: "nfGeographicalInfo", scope: "direct" },
@@ -6461,10 +6582,12 @@ const PROJECTS_SECTION: Sec = {
         { code: "3.5.E", title: "Beneficiaries", model: "nfBeneficiary", scope: "direct" },
         { code: "3.5.F", title: "Soil Data", model: "nfSoilData", scope: "direct" },
         { code: "3.5.G", title: "Budget Expenditure", model: "nfBudgetExpenditure", scope: "direct" },
+        { code: "3.5.H", title: "Team", model: "nfProjectTeam", scope: "direct", custom: buildProjectTeam("nfProjectTeam") },
       ]},
       { num: "3.6", title: "TSP/SCSP", items: [
         { code: "3.6.A", title: "TSP Activities", model: "subPlanActivity", scope: "direct", custom: buildSubPlanByType("TSP") },
         { code: "3.6.B", title: "SCSP Activities", model: "subPlanActivity", scope: "direct", custom: buildSubPlanByType("SCSP") },
+        { code: "3.6.C", title: "Team", model: "tspScspProjectTeam", scope: "direct", custom: buildProjectTeam("tspScspProjectTeam") },
       ]},
       { num: "3.7", title: "NARI", items: [
         { code: "3.7.A", title: "Nutrition Garden", model: "nariNutritionGarden", scope: "direct", custom: buildNariByActivity("nariNutritionGarden", "numbers", "No. of Gardens") },
@@ -6472,28 +6595,35 @@ const PROJECTS_SECTION: Sec = {
         { code: "3.7.C", title: "Value Addition", model: "nariValueAddition", scope: "direct", custom: buildNariByActivity("nariValueAddition", "numberOfProducts", "No. of Products") },
         { code: "3.7.D", title: "Training Program", model: "nariTraining", scope: "direct", custom: buildNariByActivity("nariTraining", "numberOfCourses", "No. of Courses") },
         { code: "3.7.E", title: "Extension Activities", model: "nariExtension", scope: "direct", custom: buildNariByActivity("nariExtension", "noOfActivities", "No. of Activities") },
+        { code: "3.7.F", title: "Team", model: "nariProjectTeam", scope: "direct", custom: buildProjectTeam("nariProjectTeam") },
       ]},
       { num: "3.8", title: "Agri-Drone", items: [
         { code: "3.8.A", title: "Introduction", model: "agriDroneIntroduction", scope: "direct" },
         { code: "3.8.B", title: "Demonstration", model: "agriDroneDemonstration", scope: "direct" },
+        { code: "3.8.C", title: "Team", model: "agriDroneProjectTeam", scope: "direct", custom: buildProjectTeam("agriDroneProjectTeam") },
       ]},
       { num: "3.9", title: "FPO and CBBO", items: [
         { code: "3.9.A", title: "Details FPO and CBBO", model: "fpoCbboDetail", scope: "direct" },
         { code: "3.9.B", title: "FPO Management", model: "fpoManagement", scope: "direct" },
+        { code: "3.9.C", title: "Team", model: "fpoProjectTeam", scope: "direct", custom: buildProjectTeam("fpoProjectTeam") },
       ]},
       { num: "3.10", title: "DRMR", items: [
         { code: "3.10.A", title: "DRMR Details", model: "drmrDetail", scope: "direct" },
         { code: "3.10.B", title: "DRMR Activity", model: "drmrActivity", scope: "direct" },
+        { code: "3.10.C", title: "Team", model: "drmrProjectTeam", scope: "direct", custom: buildProjectTeam("drmrProjectTeam") },
       ]},
       { num: "3.11", title: "Climate Resilient Agriculture (CRA)", items: [
         { code: "3.11.A", title: "CRA Details", model: "craDetail", scope: "direct" },
         { code: "3.11.B", title: "Extension Activity", model: "craExtensionActivity", scope: "direct" },
+        { code: "3.11.C", title: "Team", model: "craProjectTeam", scope: "direct", custom: buildProjectTeam("craProjectTeam") },
       ]},
       { num: "3.12", title: "CSISA", items: [
         { code: "3.12.A", title: "CSISA", model: "csisaDetail", scope: "direct" },
+        { code: "3.12.B", title: "Team", model: "csisaProjectTeam", scope: "direct", custom: buildProjectTeam("csisaProjectTeam") },
       ]},
       { num: "3.13", title: "Seed Hub Program", items: [
         { code: "3.13.A", title: "Seed Hub Program", model: "seedHubProgram", scope: "direct" },
+        { code: "3.13.B", title: "Team", model: "seedHubProjectTeam", scope: "direct", custom: buildProjectTeam("seedHubProjectTeam") },
       ]},
       { num: "3.14", title: "Other Programmes", items: [
         { code: "3.14.A", title: "Other Programmes", model: "otherProgramme", scope: "direct" },
@@ -6583,9 +6713,10 @@ const SUPER_ADMIN_TREE: Sec[] = [
             { key: "jobType", label: "Job Type" },
             { key: "mobile", label: "Mobile" },
             { key: "email", label: "Email" },
-          ]),
+          ], { where: { dateOfRetirement: null } }),
         },
         { code: "1.2.B", title: "Staff Transferred", model: "staffTransfer", scope: "direct", custom: buildStaffTransferred },
+        { code: "1.2.C", title: "Staff Retired", model: "staff", scope: "direct", custom: buildStaffRetired },
       ]},
       { num: "1.3", title: "Land & Infrastructure Information", items: [
         {
@@ -6774,8 +6905,9 @@ const KVK_TREE: Sec[] = [
           { key: "jobType", label: "Job Type" },
           { key: "mobile", label: "Mobile" },
           { key: "email", label: "Email" },
-        ]) },
+        ], { where: { dateOfRetirement: null } }) },
         { code: "1.2.B", title: "Staff Transferred", model: "staffTransfer", scope: "direct", custom: buildStaffTransferred },
+        { code: "1.2.C", title: "Staff Retired", model: "staff", scope: "direct", custom: buildStaffRetired },
       ]},
       { num: "1.3", title: "Infrastructure Information", items: [
         { code: "1.3.A", title: "Infrastructure Details", model: "infrastructure", scope: "direct", custom: kvkOwnedTable("infrastructure", [
@@ -7042,15 +7174,46 @@ async function fetchTable(entry: Entry, scope: ReportScope): Promise<ReportTable
  * (super-v2-prod.pdf). The data inside every table is still scoped by
  * `scope.kvkId` regardless of which tree is used.
  */
-export async function buildReportSections(scope: ReportScope): Promise<ReportSection[]> {
+export async function buildReportSections(
+  scope: ReportScope,
+  /**
+   * Present when the caller (a single-form or "Select Form" checklist
+   * download) only needs the subsection(s) these refs resolve to - see
+   * `subsectionsMatchingRefs`. A ref that matches nothing in this tree
+   * contributes nothing to `wanted`, and an empty `wanted` disables the
+   * restriction entirely (falls back to fetching everything), so this can
+   * never produce a stubbed-out table that a caller mistakes for real data.
+   */
+  restrictRefs?: ReportSubsectionRef[],
+): Promise<ReportSection[]> {
   const tree = scope.kvkId ? KVK_TREE : SUPER_ADMIN_TREE;
   const allEntries: { entry: Entry; secIdx: number; subIdx: number }[] = [];
   tree.forEach((sec, secIdx) =>
     sec.subs.forEach((sub, subIdx) => sub.items.forEach((entry) => allEntries.push({ entry, secIdx, subIdx }))),
   );
+  const wanted = restrictRefs?.length ? subsectionsMatchingRefs(tree, restrictRefs) : undefined;
+  const restrict = !!wanted && wanted.size > 0;
 
   const [allTables, moduleImages] = await Promise.all([
-    Promise.all(allEntries.map(({ entry }) => fetchTable(entry, scope))),
+    Promise.all(
+      allEntries.map(({ entry, secIdx, subIdx }) =>
+        restrict && !wanted!.has(`${secIdx}-${subIdx}`)
+          ? // Outside every candidate subsection for this request - pruning
+            // downstream is guaranteed to discard this table anyway, so skip
+            // the DB round trip. Same empty shape fetchTable itself returns
+            // when a builder throws.
+            Promise.resolve({
+              code: entry.code,
+              title: entry.title,
+              model: entry.model,
+              groupCode: entry.groupCode,
+              groupTitle: entry.groupTitle,
+              columns: [],
+              rows: [],
+            })
+          : fetchTable(entry, scope),
+      ),
+    ),
     // Published Module Images for this scope - each carries the Form Management
     // leaf path it was uploaded under (categoryPath), which maps to a report
     // subsection via REPORT_SUBSECTION_BY_LEAF.

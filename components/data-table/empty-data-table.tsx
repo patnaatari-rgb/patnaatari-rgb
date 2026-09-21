@@ -16,6 +16,7 @@ import {
   Pencil,
   Trash2,
   ArrowRightCircle,
+  UserX,
   ClipboardCheck,
   ImageIcon,
   FileText,
@@ -153,6 +154,8 @@ type EmptyDataTableProps = {
   readOnly?: boolean;
   /** Employee Details only: the Action dropdown gains "Transfer", opening a KVK + Date of Relieving dialog that POSTs to /api/staff/transfer. The hop then shows under the destination KVK's "Details of Staff Transferred" list only. */
   staffTransfer?: boolean;
+  /** Employee Details only: the Action dropdown gains "Retired", opening a Date of Retirement dialog that POSTs to /api/staff/retire. The staff member then leaves this list and shows in "Staff Retired". */
+  staffRetire?: boolean;
   /**
    * Employee Details only (client direction, 2026-09-13): a staff transfer
    * saves instantly, but a tab already sitting open on the DESTINATION KVK's
@@ -246,6 +249,7 @@ export function EmptyDataTable({
   onMutated,
   staffTransferHistory,
   staffTransfer,
+  staffRetire,
   autoRefresh,
   readOnly,
 }: EmptyDataTableProps) {
@@ -438,6 +442,42 @@ export function EmptyDataTable({
       setTransferError("Could not reach the server. Please try again.");
     } finally {
       setTransferring(false);
+    }
+  }
+
+  // --- Staff retirement (Employee Details) ---
+  const [staffRetireRow, setStaffRetireRow] = useState<Record<string, ReactNode> | null>(null);
+  const [staffRetireDate, setStaffRetireDate] = useState("");
+  const [staffRetireError, setStaffRetireError] = useState<string | null>(null);
+  const [staffRetireSubmitting, setStaffRetireSubmitting] = useState(false);
+
+  async function submitStaffRetire() {
+    const staffId = staffRetireRow?.id;
+    if (typeof staffId !== "string") return;
+    if (!staffRetireDate) {
+      setStaffRetireError("Select the date of retirement.");
+      return;
+    }
+    setStaffRetireError(null);
+    setStaffRetireSubmitting(true);
+    try {
+      const response = await fetch("/api/staff/retire", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId, dateOfRetirement: staffRetireDate }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setStaffRetireError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      setStaffRetireRow(null);
+      setStaffRetireDate("");
+      router.refresh();
+    } catch {
+      setStaffRetireError("Could not reach the server. Please try again.");
+    } finally {
+      setStaffRetireSubmitting(false);
     }
   }
 
@@ -1512,6 +1552,18 @@ export function EmptyDataTable({
                                 Transfer
                               </DropdownMenuItem>
                             )}
+                            {staffRetire && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setStaffRetireRow(row);
+                                  setStaffRetireDate("");
+                                  setStaffRetireError(null);
+                                }}
+                              >
+                                <UserX className="size-3.5" />
+                                Retired
+                              </DropdownMenuItem>
+                            )}
                             {staffTransferHistory && (
                               <DropdownMenuItem onClick={() => openTransferHistory(row)}>
                                 <History className="size-3.5" />
@@ -1785,6 +1837,47 @@ export function EmptyDataTable({
             <DialogFooter>
               <Button onClick={submitStaffTransfer} disabled={staffTransferSubmitting}>
                 {staffTransferSubmitting ? "Submitting…" : "Submit"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Staff retirement - Employee Details. Date of Retirement only, then the staff member moves to the Staff Retired list. */}
+      {staffRetire && (
+        <Dialog
+          open={staffRetireRow !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setStaffRetireRow(null);
+              setStaffRetireError(null);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Retirement Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-retire-date">Date of Retirement</Label>
+                <Input
+                  id="staff-retire-date"
+                  type="date"
+                  value={staffRetireDate}
+                  onChange={(e) => setStaffRetireDate(e.target.value)}
+                  className="h-10"
+                />
+              </div>
+              {staffRetireError && (
+                <p role="alert" className="text-sm font-medium text-destructive">
+                  {staffRetireError}
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={submitStaffRetire} disabled={staffRetireSubmitting}>
+                {staffRetireSubmitting ? "Submitting…" : "Submit"}
               </Button>
             </DialogFooter>
           </DialogContent>
