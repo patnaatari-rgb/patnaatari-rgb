@@ -78,6 +78,7 @@ model Role {
 
   users           User[]
   loginActivities LoginActivity[]
+  dataChangeLogs  DataChangeLog[]
   targets         Target[]
   permissions     RolePermission[]
 
@@ -145,6 +146,7 @@ model User {
   updatedAt    DateTime          @updatedAt
 
   loginActivities LoginActivity[]
+  dataChangeLogs  DataChangeLog[]
   moduleImages    ModuleImage[]
   notifications   Notification[]
 
@@ -186,6 +188,58 @@ model LoginActivity {
   @@index([zoneId])
   @@index([kvkId])
   @@index([userId])
+}
+
+enum DataChangeAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+/// Audit trail for Form Management and Masters records (security review,
+/// 2026-09-22: Log History covered sign-ins only - creating, changing or
+/// deleting a record left no trace of who, when and which record). Written
+/// centrally from the 8 generic CRUD routes (leaf-record and master-record
+/// create/update/delete, plus OFT/FLD mark-completed and transfer as an
+/// UPDATE), not from inside each of the ~350 individual leaf handlers -
+/// those already share one create/update/delete signature per registry, so
+/// hooking the route layer covers every leaf without touching them.
+///
+/// `values` is a snapshot of what the browser submitted (create: the full
+/// new record; update: the fields resubmitted by that form) - not a
+/// database-verified before/after diff, since the generic routes have no
+/// per-model knowledge of the row's previous state. Good enough to answer
+/// "who changed this and to what", the stated need; a real before/after
+/// diff would need per-model support inside leaf-record-registry.ts itself.
+/// username/role/kvkName are snapshotted at write time, same convention as
+/// LoginActivity, so a row stays readable after the user or KVK changes.
+model DataChangeLog {
+  id       String  @id @default(cuid())
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  username String
+  roleId   String?
+  role     Role?   @relation(fields: [roleId], references: [id])
+
+  kvkId   String?
+  kvk     Kvk?    @relation(fields: [kvkId], references: [id])
+  kvkName String?
+  zoneId  String
+
+  action    DataChangeAction
+  /// The full recordPath the form submits (e.g. "projects/nicra/details", or
+  /// "achievements/oft:transfer" for the one non-generic action logged).
+  formPath  String
+  /// The leaf's real label at write time (e.g. "Details"), resolved once
+  /// here rather than re-derived from formPath on every read.
+  formLabel String?
+  recordId  String?
+  values    Json?
+  createdAt DateTime @default(now())
+
+  @@index([zoneId, createdAt])
+  @@index([kvkId])
+  @@index([formPath])
 }
 
 /// Real backend for /targets (client request, "changes required 1.0.pdf"
@@ -409,6 +463,7 @@ model Kvk {
 
   users             User[]
   loginActivities   LoginActivity[]
+  dataChangeLogs    DataChangeLog[]
   targets           Target[]
   bankAccounts      BankAccount[]
   staff             Staff[]

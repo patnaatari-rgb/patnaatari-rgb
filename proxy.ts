@@ -14,7 +14,7 @@ const COOKIE_NAME = "ams_session";
  * rule. To re-open a section to KVK roles later, remove it here and from
  * KVK_HIDDEN_SLUGS together.
  */
-const SUPER_ADMIN_ONLY_PREFIXES = ["/masters", "/user-management", "/role-management"];
+const SUPER_ADMIN_ONLY_PREFIXES = ["/masters", "/user-management", "/role-management", "/data-audit-log"];
 
 /**
  * Real session check at the edge - without this, typing a dashboard URL
@@ -66,6 +66,7 @@ export const config = {
     "/module-images/:path*",
     "/targets/:path*",
     "/log-history/:path*",
+    "/data-audit-log/:path*",
     "/notifications/:path*",
     "/reports/:path*",
   ],

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { MASTER_CREATE_REGISTRY } from "@/lib/masters-registry";
 import { safeErrorMessage } from "@/lib/safe-error-message";
+import { logDataChange } from "@/lib/audit-log";
 
 /** Generic create endpoint for All Masters leaves - Super Admin only, zone-scoped (masters have no KVK owner). */
 export async function POST(request: Request) {
@@ -21,7 +22,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    await create(values, auth.session.zoneId);
+    const record = await create(values, auth.session.zoneId);
+    const recordId = (record as { id?: string } | null)?.id;
+    logDataChange({ session: auth.session, action: "CREATE", formPath: path, recordId, values });
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
     const message = safeErrorMessage(error, "Could not save this record.");

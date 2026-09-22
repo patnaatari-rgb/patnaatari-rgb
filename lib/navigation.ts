@@ -221,6 +221,7 @@ export type SidebarIconName =
   | "module-images"
   | "targets"
   | "log-history"
+  | "data-audit-log"
   | "notifications"
   | "reports";
 
@@ -3681,6 +3682,12 @@ export const SIDEBAR: SidebarSection[] = [
     icon: "log-history",
   },
   {
+    slug: "data-audit-log",
+    label: "Data Audit Log",
+    href: "/data-audit-log",
+    icon: "data-audit-log",
+  },
+  {
     slug: "notifications",
     label: "Notifications",
     href: "/notifications",
@@ -3702,6 +3709,7 @@ export const KVK_HIDDEN_SLUGS = new Set([
   "masters",
   "role-management",
   "user-management",
+  "data-audit-log",
 ]);
 
 export type SearchResult = {

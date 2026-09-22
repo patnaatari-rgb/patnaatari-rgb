@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { logDataChange } from "@/lib/audit-log";
 
 /**
  * Real "Mark Completed" implementation (client reference, On Farm Trials
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Only an Ongoing record can be marked Completed." }, { status: 400 });
     }
     await prisma.oft.update({ where: { id }, data: { status: "COMPLETED" } });
+    logDataChange({ session: auth.session, action: "UPDATE", formPath: `${path}:mark-completed`, recordId: id, values: { status: "COMPLETED" } });
     return NextResponse.json({ ok: true });
   }
 

@@ -8,6 +8,7 @@ import {
   Image,
   Target,
   History,
+  ScrollText,
   Bell,
   FileBarChart,
   type LucideIcon,
@@ -29,6 +30,7 @@ export const SIDEBAR_ICONS: Record<SidebarIconName, LucideIcon> = {
   "module-images": Image,
   targets: Target,
   "log-history": History,
+  "data-audit-log": ScrollText,
   notifications: Bell,
   reports: FileBarChart,
 };

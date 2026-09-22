@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { MASTER_DELETE_REGISTRY } from "@/lib/masters-registry";
 import { safeErrorMessage } from "@/lib/safe-error-message";
+import { logDataChange } from "@/lib/audit-log";
 
 export async function POST(request: Request) {
   const auth = await requireSession(["SUPER_ADMIN"]);
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
     if (result.count === 0) {
       return NextResponse.json({ error: "Record not found." }, { status: 404 });
     }
+    logDataChange({ session: auth.session, action: "DELETE", formPath: path, recordId: id });
     return NextResponse.json({ ok: true });
   } catch (error) {
     /** Prisma P2003 - still referenced by child master rows (e.g. a Sector with Categories under it). */
