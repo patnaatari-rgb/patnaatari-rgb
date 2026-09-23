@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Eye, EyeOff, ImageOff, MoreVertical, Trash2 } from "lucide-react";
+import { Download, Eye, EyeOff, ImageOff, Maximize2, MoreVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -75,6 +75,13 @@ export function ModuleImageCard({
               }
             />
             <DropdownMenuContent align="end" className="w-max min-w-40 whitespace-nowrap">
+              <DropdownMenuItem
+                onClick={() => window.open(row.previewUrl, "_blank", "noopener,noreferrer")}
+                disabled={!row.previewUrl}
+              >
+                <Maximize2 className="size-3.5" />
+                View
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onTogglePublish}>
                 {published ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                 {published ? "Unpublish" : "Publish"}
@@ -112,15 +119,26 @@ export function ModuleImageCard({
         >
           {published ? "Published" : "Not Published"}
         </span>
-        <button
-          type="button"
-          onClick={onDownload}
-          disabled={!row.previewUrl}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          title="Download"
-        >
-          <Download className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => window.open(row.previewUrl, "_blank", "noopener,noreferrer")}
+            disabled={!row.previewUrl}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            title="View"
+          >
+            <Maximize2 className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={!row.previewUrl}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            title="Download"
+          >
+            <Download className="size-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

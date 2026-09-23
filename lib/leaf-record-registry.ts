@@ -5,8 +5,15 @@ import { REPORT_FORM_LEAVES } from "@/lib/reports";
 import { DEMOGRAPHIC_KEYS } from "@/lib/navigation";
 
 export type RecordContext = { kvkId: string; zoneId: string };
-/** Update/delete run for both a KVK Admin (own records only) and a Super Admin (any KVK's records - Super Admin has no kvkId of its own). */
-type ScopedContext = { kvkId: string | null; zoneId: string };
+/**
+ * Update/delete run for a KVK Admin (own records only, `kvkId` set), a
+ * Super Admin (any KVK's records - no `kvkId`, no `kvkIds` either), or a
+ * Host Organisation session (`kvkIds` - every KVK mapped to its org, added
+ * 2026-09-24 for the Host Organisation role; `kvkId` stays null for it,
+ * `kvkIds` is the only new field, so a KVK Admin/Super Admin ctx - which
+ * never sets `kvkIds` - behaves exactly as before).
+ */
+type ScopedContext = { kvkId: string | null; kvkIds?: string[]; zoneId: string };
 
 type CreateFn = (values: Record<string, string>, ctx: RecordContext) => Promise<unknown>;
 
@@ -21,7 +28,20 @@ type CreateFn = (values: Record<string, string>, ctx: RecordContext) => Promise<
  * delete/update to its own rows, same as before.
  */
 function kvkScope(ctx: ScopedContext) {
-  return ctx.kvkId ? { kvkId: ctx.kvkId } : { zoneId: ctx.zoneId };
+  return ctx.kvkId
+    ? { kvkId: ctx.kvkId }
+    : ctx.kvkIds
+      ? { kvkId: { in: ctx.kvkIds } }
+      : { zoneId: ctx.zoneId };
+}
+
+/** Same as kvkScope(), for StaffTransfer's own `fromKvkId` column (it has no flat `kvkId` - a transfer is between two KVKs). */
+function fromKvkScope(ctx: ScopedContext) {
+  return ctx.kvkId
+    ? { fromKvkId: ctx.kvkId }
+    : ctx.kvkIds
+      ? { fromKvkId: { in: ctx.kvkIds } }
+      : { fromKvk: { zoneId: ctx.zoneId } };
 }
 
 /** Coercion helpers - every AddLeafPage field arrives as a plain string, these turn it into what Prisma actually expects. */
@@ -197,6 +217,36 @@ export async function syncLeafModuleImages(
     reportingYear,
     activityDate: when,
     formRecordId: opts.formRecordId,
+    uploadedById: opts.uploadedById,
+  });
+}
+
+const EMPLOYEE_DETAILS_PATH = "about-kvk/employee/employee-details";
+
+/**
+ * Employee Details' own "Photo" field (a single ID/passport-style image, not
+ * the generic multi-photo Photographs section) never showed up in Module
+ * Images - it only ever saved to Staff.photoUrl (client report, 2026-09-24).
+ * Reuses syncModuleImages with its own "staff-photo" slot so it reconciles
+ * independently of any other section a future Employee Details change might
+ * add, and clears cleanly (empty array) when the photo is removed on edit.
+ */
+export async function syncStaffPhotoModuleImage(
+  values: Record<string, string>,
+  opts: { kvkId: string; zoneId: string; formRecordId: string; uploadedById?: string },
+) {
+  const photoUrl = values.photo?.trim();
+  const staffName = (values.name ?? values.staffName ?? "").trim();
+  const raw = photoUrl ? JSON.stringify([{ url: photoUrl, caption: staffName }]) : "[]";
+  await syncModuleImages(raw, {
+    kvkId: opts.kvkId,
+    zoneId: opts.zoneId,
+    categoryPath: EMPLOYEE_DETAILS_PATH,
+    categoryLabel: leafCategoryLabel(EMPLOYEE_DETAILS_PATH),
+    reportingYear: new Date().getFullYear(),
+    activityDate: new Date(),
+    formRecordId: opts.formRecordId,
+    slot: "staff-photo",
     uploadedById: opts.uploadedById,
   });
 }
@@ -1610,7 +1660,7 @@ async function deleteWithModuleImages(
  */
 export const LEAF_DELETE_REGISTRY: Record<string, DeleteFn> = {
   "about-kvk/basic/bank-account-details": (id, ctx) => prisma.bankAccount.deleteMany({ where: { id, ...kvkScope(ctx) } }),
-  "about-kvk/employee/staff-transferred": (id, ctx) => prisma.staffTransfer.deleteMany({ where: { id, ...(ctx.kvkId ? { fromKvkId: ctx.kvkId } : { fromKvk: { zoneId: ctx.zoneId } }) } }),
+  "about-kvk/employee/staff-transferred": (id, ctx) => prisma.staffTransfer.deleteMany({ where: { id, ...fromKvkScope(ctx) } }),
   "about-kvk/land-infrastructure/infrastructure-details": (id, ctx) => prisma.infrastructure.deleteMany({ where: { id, ...kvkScope(ctx) } }),
   "about-kvk/land-infrastructure/land-details": (id, ctx) => prisma.land.deleteMany({ where: { id, ...kvkScope(ctx) } }),
   "about-kvk/land-infrastructure/staff-quarters": (id, ctx) => prisma.staffQuarters.deleteMany({ where: { id, ...kvkScope(ctx) } }),
@@ -1621,10 +1671,13 @@ export const LEAF_DELETE_REGISTRY: Record<string, DeleteFn> = {
   "about-kvk/employee/employee-details": async (id, ctx) => {
     // Staff -> StaffTransfer is a RESTRICT FK, so a staff member who has ever
     // been transferred can't be deleted directly (the transfer flow now
-    // creates these rows). Clear their transfer history first, in one txn.
+    // creates these rows). Clear their transfer history first, in one txn -
+    // and their own Module Images row (the "staff-photo" slot, 2026-09-24),
+    // same "no orphaned photos" rule deleteWithModuleImages enforces below.
     const staff = await prisma.staff.findFirst({ where: { id, ...kvkScope(ctx) }, select: { id: true } });
     if (!staff) return { count: 0 };
     await prisma.$transaction([
+      prisma.moduleImage.deleteMany({ where: { formRecordId: id, slot: "staff-photo" } }),
       prisma.staffTransfer.deleteMany({ where: { staffId: id } }),
       prisma.staff.deleteMany({ where: { id, ...kvkScope(ctx) } }),
     ]);
@@ -1927,7 +1980,7 @@ export const LEAF_UPDATE_REGISTRY: Record<string, UpdateFn> = {
     }),
   "about-kvk/employee/staff-transferred": (id, v, ctx) =>
     prisma.staffTransfer.updateMany({
-      where: { id, ...(ctx.kvkId ? { fromKvkId: ctx.kvkId } : { fromKvk: { zoneId: ctx.zoneId } }) },
+      where: { id, ...fromKvkScope(ctx) },
       data: { transferDate: reqDate(v.transferDate) },
     }),
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real backend for the Notifications page (client-documented flow, see the
@@ -46,6 +47,11 @@ export async function GET() {
 
   const isSuperAdmin = auth.session.role === "SUPER_ADMIN";
   const kvkId = auth.session.kvkId ?? undefined;
+  /** A Host Organisation (ORG_ADMIN) has no kvkId of its own - "received" means addressed to any KVK mapped to its org. */
+  const orgKvkIds =
+    auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+      ? await getHostOrgKvkIds(auth.session.hostOrgId)
+      : null;
 
   const [sent, received, kvks] = await Promise.all([
     prisma.notification.findMany({
@@ -57,7 +63,7 @@ export async function GET() {
           where: { zoneId: auth.session.zoneId, senderRole: "KVK_ADMIN" },
           orderBy: { createdAt: "desc" },
         })
-      : kvkId
+      : orgKvkIds
         ? prisma.notification.findMany({
             where: {
               zoneId: auth.session.zoneId,
@@ -65,14 +71,29 @@ export async function GET() {
               OR: [
                 {
                   senderRole: "SUPER_ADMIN",
-                  OR: [{ recipientKvkIds: { isEmpty: true } }, { recipientKvkIds: { has: kvkId } }],
+                  OR: [{ recipientKvkIds: { isEmpty: true } }, { recipientKvkIds: { hasSome: orgKvkIds } }],
                 },
-                { senderRole: "KVK_ADMIN", senderKvkId: kvkId },
+                { senderRole: "KVK_ADMIN", senderKvkId: { in: orgKvkIds } },
               ],
             },
             orderBy: { createdAt: "desc" },
           })
-        : Promise.resolve([]),
+        : kvkId
+          ? prisma.notification.findMany({
+              where: {
+                zoneId: auth.session.zoneId,
+                senderId: { not: auth.session.sub },
+                OR: [
+                  {
+                    senderRole: "SUPER_ADMIN",
+                    OR: [{ recipientKvkIds: { isEmpty: true } }, { recipientKvkIds: { has: kvkId } }],
+                  },
+                  { senderRole: "KVK_ADMIN", senderKvkId: kvkId },
+                ],
+              },
+              orderBy: { createdAt: "desc" },
+            })
+          : Promise.resolve([]),
     prisma.kvk.findMany({ where: { zoneId: auth.session.zoneId }, select: { id: true, name: true } }),
   ]);
 

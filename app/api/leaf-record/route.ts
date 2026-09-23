@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
-import { LEAF_RECORD_REGISTRY, syncLeafModuleImages } from "@/lib/leaf-record-registry";
+import { LEAF_RECORD_REGISTRY, syncLeafModuleImages, syncStaffPhotoModuleImage } from "@/lib/leaf-record-registry";
 import { safeErrorMessage } from "@/lib/safe-error-message";
 
 export async function POST(request: Request) {
@@ -20,15 +20,16 @@ export async function POST(request: Request) {
   }
 
   // These forms add a record to one specific KVK. A KVK Admin's own KVK is
-  // implicit; Super Admin adding on a KVK's behalf needs a KVK-selection
-  // step this generic form doesn't have yet, so that flow is scoped out
-  // for now rather than guessed at.
+  // implicit; Super Admin (any KVK) and, since 2026-09-24, a Host
+  // Organisation (any of several KVKs) both need a KVK-selection step this
+  // generic form doesn't have yet, so that flow is scoped out for now
+  // rather than guessed at.
   const kvkId = auth.session.kvkId;
   if (!kvkId) {
     return NextResponse.json(
       {
         error:
-          "Adding records as Super Admin isn't available on this form yet - sign in as the KVK to add its data.",
+          "Adding a new record here isn't available for this account yet - sign in as the KVK to add its data.",
       },
       { status: 400 },
     );
@@ -48,6 +49,14 @@ export async function POST(request: Request) {
         values,
         uploadedById: auth.session.sub,
       });
+      if (path === "about-kvk/employee/employee-details") {
+        await syncStaffPhotoModuleImage(values, {
+          kvkId,
+          zoneId: auth.session.zoneId,
+          formRecordId: recordId,
+          uploadedById: auth.session.sub,
+        });
+      }
     }
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {

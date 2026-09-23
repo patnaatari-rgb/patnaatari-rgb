@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
 import { REPORT_FORM_LEAVES } from "@/lib/reports";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Real backend for "Module Images UI.pdf" (2026-08-28) - was UI-only before
@@ -15,11 +16,7 @@ export async function GET() {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
-  const isKvkAdmin = auth.session.role !== "SUPER_ADMIN";
-  const where =
-    isKvkAdmin && auth.session.kvkId
-      ? { kvkId: auth.session.kvkId }
-      : { zoneId: auth.session.zoneId };
+  const where = await resolveKvkScope(auth.session);
 
   const rows = await prisma.moduleImage.findMany({
     where,

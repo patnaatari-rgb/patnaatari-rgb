@@ -46,15 +46,20 @@ export function SessionGate({ children }: { children: React.ReactNode }) {
       .then(
         (
           result:
-            | { kind: "ok"; data: { role?: SessionRole; kvkName?: string } | null }
+            | { kind: "ok"; data: { role?: SessionRole; kvkName?: string; hostOrgName?: string } | null }
             | { kind: "error"; status: number },
         ) => {
           if (cancelled) return;
 
           if (result.kind === "ok") {
             const role = result.data?.role;
-            if (role === "super-admin" || role === "kvk-admin" || role === "kvk-user") {
-              persistSession({ role, kvkName: result.data?.kvkName });
+            if (
+              role === "super-admin" ||
+              role === "host-org-admin" ||
+              role === "kvk-admin" ||
+              role === "kvk-user"
+            ) {
+              persistSession({ role, kvkName: result.data?.kvkName, hostOrgName: result.data?.hostOrgName });
               setNeedsHydration(false);
               return;
             }

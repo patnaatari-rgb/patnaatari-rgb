@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Real FLD names (Fld.technologyDemonstrated) for the "FLD Name"/"FLD"
@@ -17,11 +18,11 @@ import { requireSession } from "@/lib/api-auth";
  * the dropdown doesn't repeat an option.
  */
 export async function GET() {
-  const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
+  const auth = await requireSession(["SUPER_ADMIN", "ORG_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const flds = await prisma.fld.findMany({
-    where: auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId },
+    where: await resolveKvkScope(auth.session),
     orderBy: { technologyDemonstrated: "asc" },
     select: { technologyDemonstrated: true },
   });

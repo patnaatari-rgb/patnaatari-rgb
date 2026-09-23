@@ -2,11 +2,12 @@
 
 import { useSyncExternalStore } from "react";
 
-export type SessionRole = "super-admin" | "kvk-admin" | "kvk-user";
+export type SessionRole = "super-admin" | "host-org-admin" | "kvk-admin" | "kvk-user";
 
 export type Session = {
   role: SessionRole;
   kvkName?: string;
+  hostOrgName?: string;
 };
 
 const DEFAULT_SESSION: Session = { role: "super-admin" };

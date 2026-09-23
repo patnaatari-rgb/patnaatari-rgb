@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real counts for the Dashboard's stat cards and progress-chart summaries.
@@ -32,7 +33,23 @@ export async function GET(request: Request) {
   const needs = (key: "oft" | "fld" | "training" | "extension") => !scopeParam || scopeParam === key;
 
   const isKvkAdmin = auth.session.role !== "SUPER_ADMIN";
-  const kvkId = isKvkAdmin ? auth.session.kvkId ?? undefined : undefined;
+  /**
+   * A Host Organisation session (ORG_ADMIN) has no kvkId of its own - it's
+   * scoped to every KVK mapped to its org instead. `kvkId` below widens from
+   * "a single KVK id" to "a single id, or {in: [...]} for every KVK under a
+   * Host Org" - every existing site that spreads `{kvkId}`/`kvkId ?? ...`
+   * already accepts that shape (same convention as filterKvkIdFilter further
+   * down), so a KVK Admin/User's single-id behaviour is unchanged.
+   */
+  const orgKvkIds =
+    auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+      ? await getHostOrgKvkIds(auth.session.hostOrgId)
+      : null;
+  const kvkId: string | { in: string[] } | undefined = orgKvkIds
+    ? { in: orgKvkIds }
+    : isKvkAdmin
+      ? auth.session.kvkId ?? undefined
+      : undefined;
 
   /**
    * A KVK Admin's payload must not carry zone-wide lists - their dashboard
@@ -43,7 +60,21 @@ export async function GET(request: Request) {
    */
   const optionScope = kvkId ? { kvkId } : { zoneId: auth.session.zoneId };
 
-  /** Super Admin's own Year/State/District/KVK filter dropdowns - real query params now instead of the always-"All" placeholder they used to be. A KVK Admin is already scoped to their own KVK, so none of these apply to them. Dropdowns show names (not internal ids), so each resolves the selected name back to an id via the real State/District/Kvk tables - no guessed slugs. */
+  /**
+   * Super Admin's own Year/State/District/KVK filter dropdowns - real query
+   * params now instead of the always-"All" placeholder they used to be. A
+   * KVK Admin is already scoped to their own single KVK, so none of these
+   * apply to them. A Host Organisation (ORG_ADMIN) DOES get to use these -
+   * unlike KVK Admin/User it manages several KVKs, so narrowing by a
+   * specific KVK/State/District/Institute among its own is genuinely
+   * useful - `filterKvks`/`filterStates`/etc. below constrain every
+   * resolved id to this org's own KVKs regardless of what name was
+   * submitted, so a tampered param can only ever narrow within its
+   * existing scope, never escape it. Dropdowns show names (not internal
+   * ids), so each resolves the selected name back to an id via the real
+   * State/District/Kvk tables - no guessed slugs.
+   */
+  const isRestrictedToOwnKvk = auth.session.role === "KVK_ADMIN" || auth.session.role === "KVK_USER";
   const yearParam = url.searchParams.get("year");
   /**
    * Year and KVK are comma-separated multi-selects (main Dashboard's real
@@ -56,15 +87,15 @@ export async function GET(request: Request) {
   const reportingYears = yearValues.map(Number).filter((n) => Number.isFinite(n));
   const reportingYearFilter: number | { in: number[] } | undefined =
     reportingYears.length === 0 ? undefined : reportingYears.length === 1 ? reportingYears[0] : { in: reportingYears };
-  const kvkParam = !isKvkAdmin ? url.searchParams.get("kvk") : null;
+  const kvkParam = !isRestrictedToOwnKvk ? url.searchParams.get("kvk") : null;
   const kvkValues = kvkParam && kvkParam !== "All" ? kvkParam.split(",").map((v) => v.trim()).filter(Boolean) : [];
   /** State/District/Institute are comma-separated multi-selects too (analytics-page real checkbox dropdowns, 2026-08-28) - same additive contract as Year/KVK above. */
-  const stateParam = !isKvkAdmin ? url.searchParams.get("state") : null;
+  const stateParam = !isRestrictedToOwnKvk ? url.searchParams.get("state") : null;
   const stateValues = stateParam && stateParam !== "All" ? stateParam.split(",").map((v) => v.trim()).filter(Boolean) : [];
-  const districtParam = !isKvkAdmin ? url.searchParams.get("district") : null;
+  const districtParam = !isRestrictedToOwnKvk ? url.searchParams.get("district") : null;
   const districtValues = districtParam && districtParam !== "All" ? districtParam.split(",").map((v) => v.trim()).filter(Boolean) : [];
   /** Real now (2026-08-27) - Kvk.instituteId was added (client request) after the real "Create KVK" reference form turned out to already have a required Institute field that was never wired to the backend. Existing KVKs seeded before that stay instituteless until edited. */
-  const instituteParam = !isKvkAdmin ? url.searchParams.get("institute") : null;
+  const instituteParam = !isRestrictedToOwnKvk ? url.searchParams.get("institute") : null;
   const instituteValues = instituteParam && instituteParam !== "All" ? instituteParam.split(",").map((v) => v.trim()).filter(Boolean) : [];
   /** "Group By" on the analytics detail pages - re-buckets the same per-KVK counts by a different real dimension (Zone/State/District/Institute/KVK) instead of a new query per dimension. */
   const groupByParam = url.searchParams.get("groupBy");
@@ -79,18 +110,28 @@ export async function GET(request: Request) {
       ? breakdownParam
       : null;
 
+  /**
+   * A Host Organisation's own state/district/institute/KVK picks must
+   * resolve only among its own mapped KVKs' rows - constraining State/
+   * District/Institute by `kvks: { some: { hostOrgId } }` (rather than
+   * trusting the submitted name alone) means a tampered param naming
+   * another org's state/district/institute simply resolves to nothing,
+   * same fail-closed convention as every other adversarial check this
+   * feature adds.
+   */
+  const orgScope = orgKvkIds ? { hostOrgId: auth.session.hostOrgId! } : {};
   const [filterKvks, filterStates, filterDistricts, filterInstitutes] = await Promise.all([
     kvkValues.length > 0
-      ? prisma.kvk.findMany({ where: { zoneId: auth.session.zoneId, name: { in: kvkValues } }, select: { id: true } })
+      ? prisma.kvk.findMany({ where: { zoneId: auth.session.zoneId, name: { in: kvkValues }, ...orgScope }, select: { id: true } })
       : Promise.resolve([]),
     stateValues.length > 0
-      ? prisma.state.findMany({ where: { zoneId: auth.session.zoneId, name: { in: stateValues } }, select: { id: true } })
+      ? prisma.state.findMany({ where: { zoneId: auth.session.zoneId, name: { in: stateValues }, ...(orgKvkIds ? { kvks: { some: orgScope } } : {}) }, select: { id: true } })
       : Promise.resolve([]),
     districtValues.length > 0
-      ? prisma.district.findMany({ where: { zoneId: auth.session.zoneId, name: { in: districtValues } }, select: { id: true } })
+      ? prisma.district.findMany({ where: { zoneId: auth.session.zoneId, name: { in: districtValues }, ...(orgKvkIds ? { kvks: { some: orgScope } } : {}) }, select: { id: true } })
       : Promise.resolve([]),
     instituteValues.length > 0
-      ? prisma.institute.findMany({ where: { zoneId: auth.session.zoneId, name: { in: instituteValues } }, select: { id: true } })
+      ? prisma.institute.findMany({ where: { zoneId: auth.session.zoneId, name: { in: instituteValues }, ...(orgKvkIds ? { kvks: { some: orgScope } } : {}) }, select: { id: true } })
       : Promise.resolve([]),
   ]);
   const filterKvkIds = filterKvks.map((k) => k.id);

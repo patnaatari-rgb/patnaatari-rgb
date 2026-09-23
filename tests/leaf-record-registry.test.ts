@@ -6,6 +6,8 @@ import { formLeaves } from "./helpers/nav";
 
 const KVK_CTX = { kvkId: "kvk-1", zoneId: "zone-1" };
 const ADMIN_CTX = { kvkId: null, zoneId: "zone-1" };
+/** A Host Organisation session (ORG_ADMIN) - scoped to every KVK mapped to its org, not one KVK. */
+const ORG_CTX = { kvkId: null, kvkIds: ["kvk-2", "kvk-3"], zoneId: "zone-1" };
 
 beforeEach(resetCalls);
 
@@ -78,6 +80,7 @@ describe("a record the caller does not own is left untouched", () => {
   describe.each([
     ["KVK Admin", KVK_CTX, "kvk-1"],
     ["Super Admin", ADMIN_CTX, "zone-1"],
+    ["Host Organisation", ORG_CTX, "kvk-2"],
   ] as const)("as a %s", (_who, ctx, scopeValue) => {
     it.each(Object.keys(LEAF_DELETE_REGISTRY))("delete %s", async (path) => {
       simulateForeignRecords();

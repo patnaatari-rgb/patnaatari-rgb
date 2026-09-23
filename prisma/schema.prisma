@@ -32,12 +32,15 @@ datasource db {
 /// name on User stays `role`, so no call site needed to change) now that
 /// `Role` below is the human-facing, DB-backed role a user is actually
 /// assigned in Role Management. Every one of the 9 real roles maps to one of
-/// these 3 levels via Role.authLevel; a role with no defined enforcement
-/// scope yet (State/District/Org Admin/User - see Role.scope) fails closed
+/// these 4 levels via Role.authLevel; a role with no defined enforcement
+/// scope yet (State/District Admin/User - see Role.scope) still fails closed
 /// to KVK_USER until a real spec says otherwise, rather than guessing it
-/// should have broader access.
+/// should have broader access. ORG_ADMIN added 2026-09-24 (client request:
+/// Host Organisation login scoped to every KVK under it) - org_admin was the
+/// first of these placeholder roles to get a real scoped view built.
 enum AuthLevel {
   SUPER_ADMIN
+  ORG_ADMIN
   KVK_ADMIN
   KVK_USER
 }

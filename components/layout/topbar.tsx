@@ -79,14 +79,18 @@ export function Topbar() {
     ? ""
     : session.role === "super-admin"
       ? "Super Administrator"
-      : (session.kvkName ?? "KVK Admin");
+      : session.role === "host-org-admin"
+        ? (session.hostOrgName ?? "Host Organisation")
+        : (session.kvkName ?? "KVK Admin");
   const roleLabel = !sessionReady
     ? ""
     : session.role === "super-admin"
       ? "ATARI Super Admin"
-      : session.role === "kvk-admin"
-        ? "KVK Admin"
-        : "KVK User";
+      : session.role === "host-org-admin"
+        ? "Host Organisation Admin"
+        : session.role === "kvk-admin"
+          ? "KVK Admin"
+          : "KVK User";
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-6">

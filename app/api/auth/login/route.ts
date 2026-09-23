@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, createSessionCookie } from "@/lib/auth";
+import { verifyPassword, createSessionCookie, toClientRole } from "@/lib/auth";
 import { getClientIp } from "@/lib/api-auth";
 import { isLoginRateLimited, recordFailedLogin, clearLoginAttempts } from "@/lib/login-rate-limit";
-
-/** Maps the DB's Role enum to the client session's role string - lib/session.ts's Session shape is kept as-is so no consumer needs to change. */
-function toClientRole(role: string) {
-  if (role === "SUPER_ADMIN") return "super-admin";
-  if (role === "KVK_ADMIN") return "kvk-admin";
-  return "kvk-user";
-}
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -35,7 +28,7 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.findUnique({
     where: { username },
-    include: { kvk: true, assignedRole: true },
+    include: { kvk: true, assignedRole: true, hostOrg: true },
   });
 
   // Same generic error whether the username doesn't exist or the password is
@@ -65,6 +58,7 @@ export async function POST(request: Request) {
       districtId: user.districtId,
       hostOrgId: user.hostOrgId,
       kvkName: user.kvk?.name ?? null,
+      hostOrgName: user.hostOrg?.name ?? null,
     },
     remember,
   );
@@ -87,5 +81,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     role: toClientRole(user.role),
     kvkName: user.kvk?.name,
+    hostOrgName: user.hostOrg?.name,
   });
 }

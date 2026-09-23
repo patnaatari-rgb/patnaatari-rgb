@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Publish/unpublish toggle. Governance split confirmed in lib/module-images.ts's
@@ -12,7 +13,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
@@ -21,9 +22,7 @@ export async function PATCH(
     return NextResponse.json({ error: "published (boolean) is required." }, { status: 400 });
   }
 
-  const where = auth.session.kvkId
-    ? { id, kvkId: auth.session.kvkId }
-    : { id, zoneId: auth.session.zoneId };
+  const where = { id, ...(await resolveKvkScope(auth.session)) };
 
   const result = await prisma.moduleImage.updateMany({ where, data: { published: body.published } });
   if (result.count === 0) {
@@ -37,13 +36,11 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const where = auth.session.kvkId
-    ? { id, kvkId: auth.session.kvkId }
-    : { id, zoneId: auth.session.zoneId };
+  const where = { id, ...(await resolveKvkScope(auth.session)) };
 
   const result = await prisma.moduleImage.deleteMany({ where });
   if (result.count === 0) {

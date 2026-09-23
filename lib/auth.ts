@@ -37,7 +37,22 @@ export type SessionPayload = {
    * field existed won't have it - /api/auth/me falls back to a lookup then.
    */
   kvkName?: string | null;
+  /** Same convention as kvkName, for a Host Organisation (ORG_ADMIN) session. */
+  hostOrgName?: string | null;
 };
+
+/**
+ * Maps the DB's AuthLevel enum to the client session's role string -
+ * lib/session.tsx's Session shape is kept as-is so no consumer needs to
+ * change. Shared by the login route and /api/auth/me (previously two
+ * separately-maintained copies that could silently drift apart).
+ */
+export function toClientRole(role: string) {
+  if (role === "SUPER_ADMIN") return "super-admin";
+  if (role === "ORG_ADMIN") return "host-org-admin";
+  if (role === "KVK_ADMIN") return "kvk-admin";
+  return "kvk-user";
+}
 
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 12);

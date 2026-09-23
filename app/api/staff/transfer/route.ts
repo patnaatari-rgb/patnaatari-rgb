@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { safeErrorMessage } from "@/lib/safe-error-message";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Transfer a staff member to another KVK. Records the hop in StaffTransfer
@@ -14,7 +15,7 @@ import { safeErrorMessage } from "@/lib/safe-error-message";
  * is the one that transferred the staff out. (client direction, 2026-09-10)
  */
 export async function POST(request: Request) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const body = await request.json().catch(() => null);
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
 
   try {
     const staff = await prisma.staff.findFirst({
-      where: { id: staffId, dateOfRetirement: null, ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }) },
+      where: { id: staffId, dateOfRetirement: null, ...(await resolveKvkScope(auth.session)) },
       select: { id: true, kvkId: true, name: true, kvk: { select: { name: true } } },
     });
     if (!staff) {
@@ -69,6 +70,12 @@ export async function POST(request: Request) {
           dateOfJoining: new Date(transferDate),
           transferStatus: `Transferred from ${staff.kvk.name}`,
         },
+      }),
+      // The staff photo's own Module Images row (2026-09-24) moves with them -
+      // otherwise it stays filed under the KVK they left, invisible at the one they joined.
+      prisma.moduleImage.updateMany({
+        where: { formRecordId: staff.id, slot: "staff-photo" },
+        data: { kvkId: toKvk.id },
       }),
     ]);
 

@@ -285,6 +285,14 @@ export default function DashboardPage() {
   }
 
   const isKvkAdmin = session.role === "kvk-admin";
+  /**
+   * A Host Organisation account (added 2026-09-24) has several KVKs, not
+   * one, so it needs the same multi-KVK filter layout as Super Admin below
+   * (Year + KVK, the KVK dropdown already scoped server-side to its own
+   * org's KVKs) - only the wording distinguishes it from Super Admin's
+   * zone-wide framing, never falling into KVK Admin's single-KVK copy.
+   */
+  const isOrgAdmin = session.role === "host-org-admin";
 
   /** Changes only when a filter changes (not on the 20s poll) - drives each progress card's pagination reset so switching a filter never strands the user on a now-empty page. */
   const sharedFilterKey = JSON.stringify({
@@ -323,7 +331,9 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             {isKvkAdmin
               ? `Overview for ${session.kvkName ?? "your KVK"}`
-              : "Central overview of system activities and performance metrics"}
+              : isOrgAdmin
+                ? `Overview for ${session.hostOrgName ?? "your organisation"}'s KVKs`
+                : "Central overview of system activities and performance metrics"}
           </p>
         </div>
         <div

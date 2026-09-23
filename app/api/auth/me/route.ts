@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
-
-/** DB Role enum -> the client session's role string (same mapping the login route uses). */
-function toClientRole(role: string) {
-  if (role === "SUPER_ADMIN") return "super-admin";
-  if (role === "KVK_ADMIN") return "kvk-admin";
-  return "kvk-user";
-}
+import { toClientRole } from "@/lib/auth";
 
 /**
  * The signed-in identity, read from the verified (httpOnly) session cookie -
@@ -32,8 +26,19 @@ export async function GET() {
     kvkName = kvk?.name ?? undefined;
   }
 
+  // Same fallback convention as kvkName above, for cookies issued before hostOrgName existed.
+  let hostOrgName = auth.session.hostOrgName ?? undefined;
+  if (hostOrgName === undefined && auth.session.hostOrgId) {
+    const hostOrg = await prisma.hostOrganization.findUnique({
+      where: { id: auth.session.hostOrgId },
+      select: { name: true },
+    });
+    hostOrgName = hostOrg?.name ?? undefined;
+  }
+
   return NextResponse.json({
     role: toClientRole(auth.session.role),
     kvkName,
+    hostOrgName,
   });
 }

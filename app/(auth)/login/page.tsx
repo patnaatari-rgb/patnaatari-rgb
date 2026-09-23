@@ -114,7 +114,7 @@ function LoginForm() {
                   setSubmitting(false);
                   return;
                 }
-                persistSession({ role: data.role, kvkName: data.kvkName });
+                persistSession({ role: data.role, kvkName: data.kvkName, hostOrgName: data.hostOrgName });
                 // Keep the button in its loading state through the navigation -
                 // don't drop back to "Continue" while /login is still on screen.
                 setRedirecting(true);

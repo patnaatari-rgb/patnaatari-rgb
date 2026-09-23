@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { safeErrorMessage } from "@/lib/safe-error-message";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Mark a staff member as retired. Only the date of retirement is recorded
@@ -10,7 +11,7 @@ import { safeErrorMessage } from "@/lib/safe-error-message";
  * the row out of the source KVK's list. (client direction, 2026-09-19)
  */
 export async function POST(request: Request) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const body = await request.json().catch(() => null);
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       where: {
         id: staffId,
         dateOfRetirement: null,
-        ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }),
+        ...(await resolveKvkScope(auth.session)),
       },
       data: { dateOfRetirement: retiredOn },
     });

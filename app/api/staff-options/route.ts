@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Real staff names for the "Name of SMS/KVK Head" dropdown that recurs
@@ -27,14 +28,14 @@ import { requireSession } from "@/lib/api-auth";
 const SMS_HEAD_POSTS = ["SMS (Subject Matter Specialist)", "Senior Scientist & Head"];
 
 export async function GET(request: Request) {
-  const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
+  const auth = await requireSession(["SUPER_ADMIN", "ORG_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const role = new URL(request.url).searchParams.get("role");
 
   const rows = await prisma.staff.findMany({
     where: {
-      ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }),
+      ...(await resolveKvkScope(auth.session)),
       dateOfRetirement: null,
       ...(role === "sms-head" ? { sanctionedPost: { in: SMS_HEAD_POSTS } } : {}),
     },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * The Module Images already filed against one leaf record, in FormPhotosField's
@@ -16,9 +17,7 @@ export async function GET(request: Request) {
   const recordId = new URL(request.url).searchParams.get("recordId");
   if (!recordId) return NextResponse.json({ photos: [] });
 
-  const scope = auth.session.kvkId
-    ? { kvkId: auth.session.kvkId }
-    : { zoneId: auth.session.zoneId };
+  const scope = await resolveKvkScope(auth.session);
 
   const rows = await prisma.moduleImage.findMany({
     // slot "" is the primary end-of-form Photographs section every generic

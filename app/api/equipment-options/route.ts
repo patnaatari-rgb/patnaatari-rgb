@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * The KVK's own equipment master rows, for the "Equipment" dropdown on the
@@ -10,11 +11,11 @@ import { requireSession } from "@/lib/api-auth";
  * zone's equipment.
  */
 export async function GET() {
-  const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
+  const auth = await requireSession(["SUPER_ADMIN", "ORG_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const equipment = await prisma.equipment.findMany({
-    where: auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId },
+    where: await resolveKvkScope(auth.session),
     orderBy: { name: "asc" },
     select: {
       id: true,

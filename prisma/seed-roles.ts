@@ -46,13 +46,15 @@ const ALL_PERMISSIONS: PermissionType[] = [
 const KVK_ADMIN_PERMISSIONS: PermissionType[] = ["VIEW", "ADD_CREATE", "EDIT", "DELETE", "MANAGE_USERS"];
 
 /**
- * Every authLevel below SUPER_ADMIN/KVK_ADMIN/KVK_USER (the only 3 this
- * app's existing authorization checks understand) defaults to KVK_USER -
- * the most restrictive of the 3, not a guess at broader access. None of
- * State/District/Org Admin/User have a built scoped view anywhere in this
- * app yet (the spec defines their data-visibility rules but no page
- * implements a state/district/org-scoped dashboard) - safe-by-default until
- * that's built, rather than over-granting real access no UI enforces yet.
+ * Every authLevel below SUPER_ADMIN/ORG_ADMIN/KVK_ADMIN/KVK_USER (the only 4
+ * this app's authorization checks understand) defaults to KVK_USER - the
+ * most restrictive, not a guess at broader access. State/District Admin/User
+ * still have no built scoped view anywhere in this app (the spec defines
+ * their data-visibility rules but no page implements a state/district-scoped
+ * dashboard) - safe-by-default until that's built, rather than over-granting
+ * real access no UI enforces yet. Org Admin/org_admin got its real
+ * ORG_ADMIN authLevel + a scoped view 2026-09-24 (client request) - org_user
+ * stays on the KVK_USER default, not asked for.
  */
 const SYSTEM_ROLES: SystemRoleSeed[] = [
   {
@@ -87,9 +89,9 @@ const SYSTEM_ROLES: SystemRoleSeed[] = [
     name: "Org Admin",
     hierarchyLevel: 4,
     scope: "ORG",
-    authLevel: "KVK_USER",
+    authLevel: "ORG_ADMIN",
     description: "Manages KVKs under their assigned Organisation/Institution only.",
-    permissions: VIEW_ONLY,
+    permissions: KVK_ADMIN_PERMISSIONS,
   },
   {
     slug: "kvk_admin",

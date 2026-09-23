@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
-import { LEAF_UPDATE_REGISTRY, syncLeafModuleImages } from "@/lib/leaf-record-registry";
+import { LEAF_UPDATE_REGISTRY, syncLeafModuleImages, syncStaffPhotoModuleImage } from "@/lib/leaf-record-registry";
 import { safeErrorMessage } from "@/lib/safe-error-message";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 export async function POST(request: Request) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const body = await request.json().catch(() => null);
@@ -24,7 +25,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await update(id, values, { kvkId: auth.session.kvkId, zoneId: auth.session.zoneId });
+    const kvkIds =
+      auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+        ? await getHostOrgKvkIds(auth.session.hostOrgId)
+        : undefined;
+    const result = await update(id, values, { kvkId: auth.session.kvkId, kvkIds, zoneId: auth.session.zoneId });
     if (result.count === 0) {
       return NextResponse.json(
         { error: "Record not found, or it doesn't belong to your KVK." },
@@ -42,6 +47,14 @@ export async function POST(request: Request) {
         values,
         uploadedById: auth.session.sub,
       });
+      if (path === "about-kvk/employee/employee-details") {
+        await syncStaffPhotoModuleImage(values, {
+          kvkId: auth.session.kvkId,
+          zoneId: auth.session.zoneId,
+          formRecordId: id,
+          uploadedById: auth.session.sub,
+        });
+      }
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

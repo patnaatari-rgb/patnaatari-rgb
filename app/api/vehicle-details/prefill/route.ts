@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /**
  * Carry-forward for the yearly Vehicle Details (VehicleStatus) Add form:
@@ -11,15 +12,13 @@ import { requireSession } from "@/lib/api-auth";
  * field keys (see the vehicle-details leaf in lib/navigation.ts).
  */
 export async function GET(request: Request) {
-  const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
+  const auth = await requireSession(["SUPER_ADMIN", "ORG_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const value = new URL(request.url).searchParams.get("value")?.trim() ?? "";
   if (!value) return NextResponse.json({ fields: {} });
 
-  const scope = auth.session.kvkId
-    ? { kvkId: auth.session.kvkId }
-    : { zoneId: auth.session.zoneId };
+  const scope = await resolveKvkScope(auth.session);
 
   const vehicle = await prisma.vehicle.findFirst({
     where: { ...scope, name: value },

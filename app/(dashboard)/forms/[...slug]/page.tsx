@@ -29,6 +29,7 @@ import { cfldTabFromQuery } from "@/lib/cfld-technical-parameter-tabs";
 import { TechnicalAchievementSummaryPanel } from "@/components/data-table/technical-achievement-summary-panel";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /** Technology Week Celebration and World Soil Day moved off the popup EventDemographicDialog onto the generic full-page Add/Edit flow (client direction, 2026-09-02 - see the matching leaf-record-registry.ts comment). Kept as an empty set (rather than deleted outright) since `customForm="event-demographic"` below still exists as a real EmptyDataTable prop, just never triggered now. */
 const EVENT_DEMOGRAPHIC_SLUGS = new Set<string>([]);
@@ -59,7 +60,10 @@ function isProjectTeamSlug(slug: string): slug is ProjectTeamSlug {
 type ProjectTeamRecord = { id: string; startDate: Date; endDate: Date; projectTeam: string; name: string; kvk: { name: string } };
 
 /** The ten Project Team models are column-for-column identical, so this one narrow structural type stands in for their ten separate Prisma delegates. */
-function findProjectTeamRows(slug: ProjectTeamSlug, where: { kvkId?: string; zoneId?: string }): Promise<ProjectTeamRecord[]> {
+function findProjectTeamRows(
+  slug: ProjectTeamSlug,
+  where: { kvkId?: string | { in: string[] }; zoneId?: string },
+): Promise<ProjectTeamRecord[]> {
   const delegate = prisma[PROJECT_TEAM_MODEL_BY_SLUG[slug]] as unknown as {
     findMany(args: { where: typeof where; include: { kvk: true }; orderBy: { createdAt: "desc" } }): Promise<ProjectTeamRecord[]>;
   };
@@ -410,16 +414,27 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
   let formData: { rows: Record<string, string>[]; totalCount: number } | undefined;
   const user = node.type === "leaf" ? await getCurrentUser() : null;
   const scopedKvkId = user && user.role !== "SUPER_ADMIN" ? (user.kvkId ?? undefined) : undefined;
-  const kvkScope: { kvkId?: string; zoneId?: string } = scopedKvkId
-    ? { kvkId: scopedKvkId }
-    : { zoneId: user?.zoneId };
+  /**
+   * A Host Organisation account (ORG_ADMIN, 2026-09-24) has no kvkId of its
+   * own - scoped to every KVK mapped to its org instead. `kvkScope.kvkId`
+   * widens from "a single KVK id" to "a single id, or {in: [...]} for every
+   * KVK under a Host Org" - every one of this file's ~100 leaf queries below
+   * either spreads `kvkScope` directly or reads `kvkScope.kvkId` into a
+   * (possibly relation-nested) filter, and Prisma accepts that shape
+   * identically to a plain string, so a KVK Admin/User/Super Admin's
+   * behaviour is unchanged.
+   */
+  const orgKvkIds =
+    user?.role === "ORG_ADMIN" && user.hostOrgId ? await getHostOrgKvkIds(user.hostOrgId) : null;
+  const kvkScope: { kvkId?: string | { in: string[] }; zoneId?: string } = orgKvkIds
+    ? { kvkId: { in: orgKvkIds } }
+    : scopedKvkId
+      ? { kvkId: scopedKvkId }
+      : { zoneId: user?.zoneId };
 
   if (user && node.type === "leaf" && node.slug === "view-kvks") {
     const kvks = await prisma.kvk.findMany({
-      where:
-        user.role !== "SUPER_ADMIN" && user.kvkId
-          ? { id: user.kvkId }
-          : { zoneId: user.zoneId },
+      where: kvkScope.kvkId ? { id: kvkScope.kvkId } : { zoneId: user.zoneId },
       include: { state: true, district: true, hostOrg: true, zone: true, institute: true },
       orderBy: { name: "asc" },
     });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real Transfer implementation (client spec, "Pointers for super admin 24
@@ -20,9 +21,14 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
 
   const kvkId = auth.session.kvkId;
-  if (!kvkId) {
+  const kvkIds =
+    !kvkId && auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+      ? await getHostOrgKvkIds(auth.session.hostOrgId)
+      : null;
+  if (!kvkId && !kvkIds) {
     return NextResponse.json({ error: "Only a KVK can transfer its own records." }, { status: 400 });
   }
+  const scope = kvkId ? { kvkId } : { kvkId: { in: kvkIds! } };
 
   const body = await request.json().catch(() => null);
   const path = typeof body?.path === "string" ? body.path : "";
@@ -32,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   if (path === "achievements/oft") {
-    const original = await prisma.oft.findFirst({ where: { id, kvkId } });
+    const original = await prisma.oft.findFirst({ where: { id, ...scope } });
     if (!original) return NextResponse.json({ error: "Record not found." }, { status: 404 });
     if (original.status !== "ONGOING") {
       return NextResponse.json({ error: "Only an Ongoing record can be transferred." }, { status: 400 });
@@ -46,7 +52,7 @@ export async function POST(request: Request) {
   }
 
   if (path === "achievements/front-line-demonstration/view-fld") {
-    const original = await prisma.fld.findFirst({ where: { id, kvkId } });
+    const original = await prisma.fld.findFirst({ where: { id, ...scope } });
     if (!original) return NextResponse.json({ error: "Record not found." }, { status: 404 });
     if (original.status !== "ONGOING") {
       return NextResponse.json({ error: "Only an Ongoing record can be transferred." }, { status: 400 });
