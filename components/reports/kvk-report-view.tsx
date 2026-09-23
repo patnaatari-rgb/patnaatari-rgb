@@ -27,6 +27,16 @@ type KvkReportViewProps = {
    * KVK regardless of what this label says.
    */
   kvkName?: string;
+  /**
+   * Set instead of `kvkName` for a Host Organisation session (client
+   * direction, 2026-09-24: its report looks exactly like a KVK's own -
+   * same screen, same filters - just combined across every KVK the org is
+   * mapped to, never a whole-zone rollup). Only the read-only "which
+   * account this report is scoped to" notice differs in wording; the
+   * server resolves the real KVK set from the session itself either way,
+   * never from this label.
+   */
+  hostOrgName?: string;
 };
 
 /**
@@ -42,9 +52,10 @@ type KvkReportViewProps = {
  * row is replaced by a read-only notice showing which KVK they're reporting
  * on - a data-isolation rule, not a layout divergence.
  */
-export function KvkReportView({ kvkName }: KvkReportViewProps) {
+export function KvkReportView({ kvkName, hostOrgName }: KvkReportViewProps) {
   const router = useRouter();
-  const currentKvkName = kvkName ?? "Your KVK";
+  const currentKvkName = hostOrgName ?? kvkName ?? "Your KVK";
+  const scopeLabel = hostOrgName ? "Organisation" : "KVK";
   const [selectedForms, setSelectedForms] = useState<Set<string>>(
     new Set(ALL_FORM_PATHS),
   );
@@ -153,7 +164,7 @@ export function KvkReportView({ kvkName }: KvkReportViewProps) {
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs font-medium text-muted-foreground">
-              KVK
+              {scopeLabel}
             </label>
             <div className="mt-1 flex h-9 w-full items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-sm text-muted-foreground">
               <Info className="size-3.5 shrink-0" />

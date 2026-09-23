@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 const dec = (v: string | undefined) => (v?.trim() ? Number(v) : undefined);
 const numStr = (v: unknown) => (v === null || v === undefined ? "" : String(v));
@@ -10,10 +11,10 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
-  const kvkScope = auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId };
+  const kvkScope = await resolveKvkScope(auth.session);
 
   const record = await prisma.fld.findFirst({ where: { id, ...kvkScope } });
   if (!record) return NextResponse.json({ error: "Record not found." }, { status: 404 });
@@ -36,10 +37,10 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
-  const kvkScope = auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId };
+  const kvkScope = await resolveKvkScope(auth.session);
 
   const body = await request.json().catch(() => null);
   const v: Record<string, string> = body?.values ?? {};

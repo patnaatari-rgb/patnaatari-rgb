@@ -34,7 +34,24 @@
  * before grouping into blocks - see `applyListFilter` below.
  */
 export type ReportScope = {
-  kvkId?: string;
+  /**
+   * A single KVK id for a KVK Admin/User's own report (unchanged), OR
+   * `{in: [...]}` for a Host Organisation's report (client direction,
+   * 2026-09-24: "same as a KVK's own report - just every KVK under the org
+   * combined, not a whole-zone rollup and not one repeated report per
+   * KVK"). Deliberately widened in place rather than added as a separate
+   * field: every one of lib/report-data.ts's ~69 `scope.kvkId` sites either
+   * (a) spreads it straight into a Prisma where-clause (`{kvkId: scope.kvkId}`,
+   * possibly relation-nested), where `{in: [...]}` is accepted identically
+   * to a plain string, or (b) reads it as a truthy/falsy structural switch
+   * (single-KVK column set, single-KVK wording) - and a Host Organisation's
+   * report is *supposed* to take the same structural branch a KVK's does,
+   * per the direction above, so widening the value in place (rather than a
+   * separate `kvkIds` field only some sites would remember to check) is
+   * what makes that "look like a KVK report" requirement hold everywhere
+   * automatically instead of by auditing each site by hand.
+   */
+  kvkId?: string | { in: string[] };
   zoneId: string;
   fromDate?: string;
   toDate?: string;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { getHostOrgKvkIds, resolveKvkScope } from "@/lib/host-org-scope";
 
 const CATEGORIES = ["OFT", "FLD", "Training", "Extension Activity"] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -28,9 +29,8 @@ export async function GET() {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
-  const kvkId = auth.session.role !== "SUPER_ADMIN" ? auth.session.kvkId ?? undefined : undefined;
   const targets = await prisma.target.findMany({
-    where: kvkId ? { kvkId } : { zoneId: auth.session.zoneId },
+    where: await resolveKvkScope(auth.session),
     include: { kvk: { select: { name: true } } },
     orderBy: [{ reportingYear: "desc" }, { kvk: { name: "asc" } }],
   });
@@ -82,12 +82,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Your account has no assigned role." }, { status: 403 });
   }
 
-  // KVK Admin/User can only ever set their own KVK's target; Super Admin picks the KVK(s).
+  // KVK Admin/User can only ever set their own KVK's target; Super Admin picks
+  // any KVK(s) in the zone; a Host Organisation (ORG_ADMIN) picks among its
+  // own mapped KVKs only - resolved by id so a tampered name outside its org
+  // simply fails to match, same fail-closed pattern used everywhere else.
   let kvkIds: string[];
-  if (auth.session.role === "SUPER_ADMIN") {
+  if (auth.session.role === "SUPER_ADMIN" || auth.session.role === "ORG_ADMIN") {
     if (kvkNames.length === 0) return NextResponse.json({ error: "Select at least one KVK." }, { status: 400 });
+    const allowedKvkIds =
+      auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+        ? await getHostOrgKvkIds(auth.session.hostOrgId)
+        : null;
     const kvks = await prisma.kvk.findMany({
-      where: { zoneId: auth.session.zoneId, name: { in: kvkNames } },
+      where: {
+        zoneId: auth.session.zoneId,
+        name: { in: kvkNames },
+        ...(allowedKvkIds ? { id: { in: allowedKvkIds } } : {}),
+      },
       select: { id: true, name: true },
     });
     const missing = kvkNames.filter((n) => !kvks.some((k) => k.name === n));
@@ -135,9 +146,8 @@ export async function DELETE(request: Request) {
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing target id." }, { status: 400 });
 
-  const kvkId = auth.session.role !== "SUPER_ADMIN" ? auth.session.kvkId ?? undefined : undefined;
   const result = await prisma.target.deleteMany({
-    where: { id, ...(kvkId ? { kvkId } : { zoneId: auth.session.zoneId }) },
+    where: { id, ...(await resolveKvkScope(auth.session)) },
   });
   if (result.count === 0) return NextResponse.json({ error: "Target not found." }, { status: 404 });
   return NextResponse.json({ ok: true });

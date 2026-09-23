@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
 import { getTrackedLeaves, yearsWhereFor } from "@/lib/form-summary-data";
 import { modelDelegate } from "@/lib/prisma-delegate";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real per-KVK, per-form entry counts across every one of the app's ~108
@@ -35,6 +36,12 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const kvkId = auth.session.role === "SUPER_ADMIN" ? undefined : auth.session.kvkId ?? undefined;
+  /** A Host Organisation (ORG_ADMIN) has no kvkId of its own - scoped to every KVK mapped to its org instead, same {in: [...]} shape used everywhere else this feature touches. */
+  const orgKvkIds =
+    auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+      ? await getHostOrgKvkIds(auth.session.hostOrgId)
+      : null;
+  const kvkIdFilter: string | { in: string[] } | undefined = orgKvkIds ? { in: orgKvkIds } : kvkId;
 
   // `?year=` accepts a single 4-digit year or a comma-separated list (the
   // page's year filter is a checkbox multi-select). Empty/invalid = all-time.
@@ -46,14 +53,14 @@ export async function GET(request: Request) {
     .map(Number)
     .sort((a, b) => a - b);
 
-  const cacheKey = `${auth.session.zoneId}:${kvkId ?? "all"}:${years.length ? years.join("-") : "all"}`;
+  const cacheKey = `${auth.session.zoneId}:${orgKvkIds ? orgKvkIds.join(",") : (kvkId ?? "all")}:${years.length ? years.join("-") : "all"}`;
   const hit = responseCache.get(cacheKey);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
     return NextResponse.json(hit.body);
   }
 
   const kvks = await prisma.kvk.findMany({
-    where: kvkId ? { id: kvkId } : { zoneId: auth.session.zoneId },
+    where: kvkIdFilter ? { id: kvkIdFilter } : { zoneId: auth.session.zoneId },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -64,8 +71,8 @@ export async function GET(request: Request) {
     leaves.map(async (leaf) => {
       const delegate = modelDelegate(leaf.model);
       const field = leaf.kvkField ?? "kvkId";
-      const where: Record<string, unknown> = kvkId
-        ? { [field]: kvkId }
+      const where: Record<string, unknown> = kvkIdFilter
+        ? { [field]: kvkIdFilter }
         : { zoneId: auth.session.zoneId };
       if (leaf.extraWhere) Object.assign(where, leaf.extraWhere);
       if (years.length > 0) Object.assign(where, yearsWhereFor(leaf.model, years));

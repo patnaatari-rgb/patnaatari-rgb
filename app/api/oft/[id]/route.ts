@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 const numStr = (v: unknown) => (v === null || v === undefined ? "" : String(v));
 const dateStr = (v: Date | null | undefined) => (v ? v.toISOString().slice(0, 10) : "");
@@ -10,12 +11,12 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const record = await prisma.oft.findFirst({
-    where: { id, ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }) },
+    where: { id, ...(await resolveKvkScope(auth.session)) },
     include: { technologyOptions: { orderBy: { id: "asc" } } },
   });
   if (!record) {

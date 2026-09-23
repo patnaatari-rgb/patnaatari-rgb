@@ -2,21 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
 import { parseStaffQuartersBody, writeOccupancy } from "../shared";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-function scopeWhere(id: string, kvkId: string | null, zoneId: string) {
-  return kvkId ? { id, kvkId } : { id, zoneId };
-}
-
 /** Load one Staff Quarters record (plus its occupancy grid) for the bespoke Edit form. */
 export async function GET(_request: Request, { params }: RouteParams) {
-  const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
+  const auth = await requireSession(["SUPER_ADMIN", "ORG_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const record = await prisma.staffQuarters.findFirst({
-    where: scopeWhere(id, auth.session.kvkId, auth.session.zoneId),
+    where: { id, ...(await resolveKvkScope(auth.session)) },
     include: { occupancy: true },
   });
   if (!record) return NextResponse.json({ error: "Staff Quarters not found." }, { status: 404 });
@@ -39,12 +36,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 /** Update the record's summary fields and replace its occupancy grid. */
 export async function PATCH(request: Request, { params }: RouteParams) {
-  const auth = await requireSession(["SUPER_ADMIN", "KVK_ADMIN"]);
+  const auth = await requireSession(["SUPER_ADMIN", "ORG_ADMIN", "KVK_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const existing = await prisma.staffQuarters.findFirst({
-    where: scopeWhere(id, auth.session.kvkId, auth.session.zoneId),
+    where: { id, ...(await resolveKvkScope(auth.session)) },
     select: { id: true },
   });
   if (!existing) return NextResponse.json({ error: "Staff Quarters not found." }, { status: 404 });

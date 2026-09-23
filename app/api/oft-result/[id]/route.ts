@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
 import { parseResultTables, type OftResultTable } from "@/lib/oft-result-tables";
 import { leafCategoryLabel, syncModuleImages } from "@/lib/leaf-record-registry";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /** The Edit OFT Result "Photographs" section stores through ModuleImage (like every other form's photos) under this slot, so each photo carries a caption and flows to Module Images + Reports without colliding with the main OFT form's own Photographs section (same formRecordId, slot ""). */
 const OFT_RESULT_PHOTO_SLOT = "oft-result";
@@ -21,10 +22,10 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
-  const kvkScope = auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId };
+  const kvkScope = await resolveKvkScope(auth.session);
 
   const record = await prisma.oft.findFirst({
     where: { id, ...kvkScope },
@@ -58,10 +59,10 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
-  const kvkScope = auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId };
+  const kvkScope = await resolveKvkScope(auth.session);
 
   const body = await request.json().catch(() => null);
   const markCompleted = body?.markCompleted === true;

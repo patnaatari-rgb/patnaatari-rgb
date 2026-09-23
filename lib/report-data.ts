@@ -311,16 +311,19 @@ export const MODEL_PERIOD_DATE_FIELDS: Record<string, string[]> = {
  * report-builder scope exactly (buildVehicleStatus, buildEquipmentStatus,
  * buildStaffTransferred, buildFldExtensionTraining below).
  */
-const KVK_WHERE_OVERRIDE: Record<string, (kvkId: string) => Record<string, unknown>> = {
+const KVK_WHERE_OVERRIDE: Record<string, (kvkId: string | { in: string[] }) => Record<string, unknown>> = {
   vehicleStatus: (kvkId) => ({ vehicle: { kvkId } }),
   equipmentStatus: (kvkId) => ({ equipment: { kvkId } }),
   staffTransfer: (kvkId) => ({ fromKvkId: kvkId }),
   fldExtensionTraining: (kvkId) => ({ fld: { kvkId } }),
 };
 
-function kvkOrZoneWhere(model: string, scope: { kvkId?: string; zoneId: string }): Record<string, unknown> {
+export function kvkOrZoneWhere(
+  model: string,
+  scope: { kvkId?: string | { in: string[] }; zoneId: string },
+): Record<string, unknown> {
   if (!scope.kvkId) return { zoneId: scope.zoneId };
-  return (KVK_WHERE_OVERRIDE[model] ?? ((kvkId: string) => ({ kvkId })))(scope.kvkId);
+  return (KVK_WHERE_OVERRIDE[model] ?? ((kvkId) => ({ kvkId })))(scope.kvkId);
 }
 
 /**
@@ -350,7 +353,7 @@ const REPORTING_YEARS_CACHE = new Map<string, { years: string[]; expiresAt: numb
 const REPORTING_YEARS_CACHE_TTL_MS = 60_000;
 
 export async function distinctReportingYears(scope: {
-  kvkId?: string;
+  kvkId?: string | { in: string[] };
   zoneId: string;
   /**
    * Client direction, 2026-09-13: a specific "Reporting Year" field (OFT's
@@ -367,7 +370,12 @@ export async function distinctReportingYears(scope: {
    */
   model?: string;
 }): Promise<string[]> {
-  const cacheKey = `${scope.kvkId ?? `zone:${scope.zoneId}`}:${scope.model ?? "*"}`;
+  // A Host Organisation's `kvkId` is `{in: [...]}`, not a plain string - stringifying it
+  // directly would collapse every org to the same "[object Object]" key, corrupting the
+  // cache across different orgs. Its own sorted id list makes the key unique per org.
+  const kvkCacheKey =
+    typeof scope.kvkId === "string" ? scope.kvkId : scope.kvkId ? [...scope.kvkId.in].sort().join(",") : undefined;
+  const cacheKey = `${kvkCacheKey ?? `zone:${scope.zoneId}`}:${scope.model ?? "*"}`;
   const cached = REPORTING_YEARS_CACHE.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.years;
 
@@ -377,7 +385,7 @@ export async function distinctReportingYears(scope: {
 }
 
 async function computeDistinctReportingYears(scope: {
-  kvkId?: string;
+  kvkId?: string | { in: string[] };
   zoneId: string;
   model?: string;
 }): Promise<string[]> {
@@ -7152,14 +7160,18 @@ async function fetchTable(entry: Entry, scope: ReportScope): Promise<ReportTable
  * subsection-to-subsection.
  *
  * Two section trees, one per report the client asked for: a report scoped to
- * exactly one KVK (KVK Admin, or a Super Admin who filtered to a single KVK)
- * follows KVK_TREE, which matches the client's own single-KVK export
+ * one KVK Admin, or a Super Admin who filtered to a single KVK, OR (client
+ * direction, 2026-09-24) a Host Organisation's own report - combined across
+ * every KVK it's mapped to, structured exactly like a single KVK's report,
+ * never a repeated-per-KVK or whole-zone shape - follows KVK_TREE, which
+ * matches the client's own single-KVK export
  * (Atari_Management_System_Deviation_Report.pdf / kvk-report-*.pdf - "1.3
  * Infrastructure Information", no State-Wise OFT/FLD tables, Prevalent
  * Diseases at 4.2.E/F, section 5 = PPV/RAWE/Digital). Every other scope
  * follows SUPER_ADMIN_TREE, which matches the 93pg "all data" export
  * (super-v2-prod.pdf). The data inside every table is still scoped by
- * `scope.kvkId` regardless of which tree is used.
+ * `scope.kvkId` regardless of which tree is used - a plain string for a
+ * single KVK, `{in: [...]}` for a Host Organisation's several.
  */
 export async function buildReportSections(
   scope: ReportScope,

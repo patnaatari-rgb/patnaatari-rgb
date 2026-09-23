@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
 import { percentIncreaseInYield, yieldGapMinimizedPercent } from "@/lib/cfld-formulas";
 import { leafCategoryLabel, syncModuleImages } from "@/lib/leaf-record-registry";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 /** The two CFLD Technical Parameter photo cards each store through ModuleImage under their own slot, so every photo carries a caption and flows to Module Images + Reports. */
 const CFLD_LEAF_PATH = "projects/cfld/technical-parameter";
@@ -23,12 +24,12 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const record = await prisma.cfldTechnicalParameter.findFirst({
-    where: { id, ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }) },
+    where: { id, ...(await resolveKvkScope(auth.session)) },
     include: { economicParameters: true, farmersPerceptions: true, socioEconomicImpacts: true },
   });
   if (!record) {
@@ -118,12 +119,12 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const existing = await prisma.cfldTechnicalParameter.findFirst({
-    where: { id, ...(auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId }) },
+    where: { id, ...(await resolveKvkScope(auth.session)) },
   });
   if (!existing) {
     return NextResponse.json({ error: "Record not found." }, { status: 404 });

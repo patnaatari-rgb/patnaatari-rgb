@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real counts for the sections of the Technical Achievement Summary matrix
@@ -27,6 +28,8 @@ export async function GET(request: Request) {
   let kvkIds: string[] | undefined;
   if (auth.session.role !== "SUPER_ADMIN" && auth.session.kvkId) {
     kvkId = auth.session.kvkId;
+  } else if (auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId) {
+    kvkIds = await getHostOrgKvkIds(auth.session.hostOrgId);
   } else if (kvkNameFilters.length === 1) {
     const kvk = await prisma.kvk.findFirst({
       where: { zoneId: auth.session.zoneId, name: kvkNameFilters[0] },

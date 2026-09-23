@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
+import { resolveKvkScope } from "@/lib/host-org-scope";
 
 const reqStr = (v: string | undefined) => v?.trim() ?? "";
 const reqInt = (v: string | undefined) => parseInt(v ?? "0", 10) || 0;
@@ -45,11 +46,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
   const slug = new URL(request.url).searchParams.get("slug");
-  const kvkScope = auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId };
+  const kvkScope = await resolveKvkScope(auth.session);
 
   if (slug === "technology-week-celebration") {
     const record = await prisma.technologyWeekCelebration.findFirst({
@@ -94,10 +95,10 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
+  const auth = await requireSession(["KVK_ADMIN", "ORG_ADMIN", "SUPER_ADMIN"]);
   if (!auth.ok) return auth.response;
   const { id } = await params;
-  const kvkScope = auth.session.kvkId ? { kvkId: auth.session.kvkId } : { zoneId: auth.session.zoneId };
+  const kvkScope = await resolveKvkScope(auth.session);
 
   const body = await request.json().catch(() => null);
   const slug = body?.slug;

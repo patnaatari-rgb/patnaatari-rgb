@@ -11,6 +11,7 @@ import {
   type ReportSubsectionRef,
 } from "@/lib/report-section-map";
 import { leafModelFor } from "@/lib/form-summary-data";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real report data for the "Download Report" PDF - the exact section tree
@@ -75,10 +76,24 @@ export async function GET(request: Request) {
     searchArg || (columnValuesArg && Object.keys(columnValuesArg).length > 0)
       ? { search: searchArg, columnValues: columnValuesArg }
       : undefined;
-  const isKvkScoped = auth.session.role !== "SUPER_ADMIN";
+  /**
+   * KVK Admin/User are always scoped to their own single KVK. A Host
+   * Organisation (ORG_ADMIN) - client direction, 2026-09-24 - gets a report
+   * combined across every KVK mapped to its org, structured exactly like a
+   * KVK's own report (buildReportSections picks KVK_TREE off `scope.kvkId`
+   * being truthy, which `{in: [...]}` satisfies same as a plain string).
+   * Super Admin gets every KVK in the zone by default, or one specific KVK
+   * via ?kvk=<name>.
+   */
+  const isRestrictedToOwnKvk = auth.session.role === "KVK_ADMIN" || auth.session.role === "KVK_USER";
+  const isOrgAdmin = auth.session.role === "ORG_ADMIN" && !!auth.session.hostOrgId;
 
-  let kvkId: string | undefined = isKvkScoped ? auth.session.kvkId ?? undefined : undefined;
-  if (!isKvkScoped && kvkNameFilter && kvkNameFilter !== "All") {
+  let kvkId: string | { in: string[] } | undefined = isRestrictedToOwnKvk
+    ? auth.session.kvkId ?? undefined
+    : isOrgAdmin
+      ? { in: await getHostOrgKvkIds(auth.session.hostOrgId!) }
+      : undefined;
+  if (!isRestrictedToOwnKvk && !isOrgAdmin && kvkNameFilter && kvkNameFilter !== "All") {
     const match = await prisma.kvk.findFirst({
       where: { zoneId: auth.session.zoneId, name: kvkNameFilter },
       select: { id: true },

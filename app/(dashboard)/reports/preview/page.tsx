@@ -197,9 +197,16 @@ function ReportPreviewContent() {
   // For a KVK Admin the report is scoped server-side to their own KVK, so the
   // authoritative name is the one the generate route returns, not the query
   // param (which is only a display hint and can be a neutral placeholder when
-  // the session has no KVK name).
+  // the session has no KVK name). A Host Organisation's report (2026-09-24)
+  // reuses this same "kvk" preview type but is combined across several real
+  // KVKs - `kvkNames.length > 1` is how that's told apart here, since only a
+  // Host Organisation session ever produces more than one under `type=kvk`
+  // (a KVK Admin/User always has exactly one). Its meta row shows the
+  // organisation name (the query param, sent as `kvk` by KvkReportView) plus
+  // how many KVKs the report combines, rather than one arbitrary KVK's name.
+  const isHostOrgReport = type === "kvk" && (report?.kvkNames?.length ?? 0) > 1;
   const kvkNameForMeta =
-    (type === "kvk" ? report?.kvkNames?.[0] : undefined) ??
+    (type === "kvk" && !isHostOrgReport ? report?.kvkNames?.[0] : undefined) ??
     params.get("kvk") ??
     "";
 
@@ -207,7 +214,12 @@ function ReportPreviewContent() {
     type === "kvk"
       ? [
           [
-            { label: "KVK Name", value: kvkNameForMeta },
+            {
+              label: isHostOrgReport ? "Host Organisation" : "KVK Name",
+              value: isHostOrgReport
+                ? `${kvkNameForMeta} (${report?.kvkNames?.length ?? 0} KVKs)`
+                : kvkNameForMeta,
+            },
             { label: "Form", value: params.get("form") ?? "All Forms" },
           ],
           dateRows,

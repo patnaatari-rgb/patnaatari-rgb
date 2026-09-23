@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { distinctReportingYears } from "@/lib/report-data";
+import { getHostOrgKvkIds } from "@/lib/host-org-scope";
 
 /**
  * Real years for the Reports / Form Management "Reporting Year" checkbox
@@ -23,8 +24,12 @@ export async function GET(request: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
-  const isKvkScoped = auth.session.role !== "SUPER_ADMIN";
-  const kvkId = isKvkScoped ? auth.session.kvkId ?? undefined : undefined;
+  const isRestrictedToOwnKvk = auth.session.role === "KVK_ADMIN" || auth.session.role === "KVK_USER";
+  const kvkId: string | { in: string[] } | undefined = isRestrictedToOwnKvk
+    ? auth.session.kvkId ?? undefined
+    : auth.session.role === "ORG_ADMIN" && auth.session.hostOrgId
+      ? { in: await getHostOrgKvkIds(auth.session.hostOrgId) }
+      : undefined;
   const model = new URL(request.url).searchParams.get("model") ?? undefined;
 
   const years = await distinctReportingYears({ kvkId, zoneId: auth.session.zoneId, model });
