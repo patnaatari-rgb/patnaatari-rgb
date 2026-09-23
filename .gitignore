@@ -74,3 +74,5 @@ scripts/_tmp*
 .cursor/
 skills-lock.json
 .playwright-mcp/
+
+.env*

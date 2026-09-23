@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/api-auth";
-import { logDataChange } from "@/lib/audit-log";
 
 /**
  * Real Transfer implementation (client spec, "Pointers for super admin 24
@@ -43,7 +42,6 @@ export async function POST(request: Request) {
       prisma.oft.update({ where: { id }, data: { status: "TRANSFERRED" } }),
       prisma.oft.create({ data: { ...rest, reportingYear: reportingYear + 1, status: "ONGOING" } }),
     ]);
-    logDataChange({ session: auth.session, action: "UPDATE", formPath: `${path}:transfer`, recordId: id, values: { fromReportingYear: reportingYear, toReportingYear: reportingYear + 1 } });
     return NextResponse.json({ ok: true });
   }
 
@@ -58,7 +56,6 @@ export async function POST(request: Request) {
       prisma.fld.update({ where: { id }, data: { status: "TRANSFERRED" } }),
       prisma.fld.create({ data: { ...rest, reportingYear: reportingYear + 1, status: "ONGOING" } }),
     ]);
-    logDataChange({ session: auth.session, action: "UPDATE", formPath: `${path}:transfer`, recordId: id, values: { fromReportingYear: reportingYear, toReportingYear: reportingYear + 1 } });
     return NextResponse.json({ ok: true });
   }
 

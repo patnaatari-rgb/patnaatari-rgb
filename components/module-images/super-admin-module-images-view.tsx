@@ -58,6 +58,9 @@ const EXPORT_COLUMNS: MasterColumn[] = [
 
 const STATUS_OPTIONS = ["Published", "Not Published"];
 
+/** Real photo grid, 2026-09-24: cross-KVK view can have 60+ photographs at once, and loading every one's image together was the slow part of this page - paginate client-side over the already-fetched+filtered rows instead of a slower server round-trip per page. */
+const PAGE_SIZE = 10;
+
 /**
  * Super Admin - Module Images → Category Wise Photographs. Matches
  * "Module Images UI.pdf" section 2-9 & 17: Reporting Year + multi-select
@@ -250,6 +253,17 @@ export function SuperAdminModuleImagesView() {
         status: isPublished(row) ? "Published" : "Not Published",
       })),
     [filteredRows, isPublished],
+  );
+
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1);
+  }, [selectedYears, selectedKvks, selectedCategories, selectedStatuses, fromDate, toDate, search]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filteredRows.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
   );
 
   const hasActiveFilters =
@@ -655,7 +669,7 @@ export function SuperAdminModuleImagesView() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredRows.map((row) => (
+              {pageRows.map((row) => (
                 <ModuleImageCard
                   key={row.id}
                   row={row}
@@ -676,13 +690,23 @@ export function SuperAdminModuleImagesView() {
           <span>
             {filteredRows.length === 0
               ? "Showing 0-0 of 0"
-              : `Showing 1-${filteredRows.length} of ${filteredRows.length}`}
+              : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(currentPage * PAGE_SIZE, filteredRows.length)} of ${filteredRows.length}`}
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
               Prev
             </Button>
-            <Button variant="outline" size="sm" disabled>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= pageCount}
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            >
               Next
             </Button>
           </div>

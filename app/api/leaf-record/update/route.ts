@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 import { LEAF_UPDATE_REGISTRY, syncLeafModuleImages } from "@/lib/leaf-record-registry";
 import { safeErrorMessage } from "@/lib/safe-error-message";
-import { logDataChange } from "@/lib/audit-log";
 
 export async function POST(request: Request) {
   const auth = await requireSession(["KVK_ADMIN", "SUPER_ADMIN"]);
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
         uploadedById: auth.session.sub,
       });
     }
-    logDataChange({ session: auth.session, action: "UPDATE", formPath: path, recordId: id, values });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = safeErrorMessage(error, "Could not update this record.");
