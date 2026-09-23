@@ -15,7 +15,7 @@
  * Staff name resolution: matched by normalized name only (not also by
  * current KVK) - a staff member's *current* Staff.kvkId only reflects their
  * latest placement, but a person who was transferred more than once (this
- * sheet has real multi-hop cases, e.g. "Gopal Krishna": Jamtara->Latehar
+ * sheet has real multi-hop cases, e.g. staff transferred Jamtara->Latehar
  * then Latehar->Dumka) needs every hop attached to the same staffId
  * regardless of which hop is "current". Reports any name that doesn't
  * resolve to exactly one Staff row instead of guessing.
@@ -106,7 +106,7 @@ async function main() {
   }
   /**
    * When more than one Staff row shares a name (real, common in this data -
-   * e.g. 3 different people are all "MD Nadeem Akhtar"), prefer whichever
+   * e.g. 3 different people sharing the same name), prefer whichever
    * one's *current* kvkId is this row's "to" KVK - that's the specific
    * person who ended up there, which is exactly the placement a transfer
    * record is describing. Falls back to reporting real ambiguity only if
