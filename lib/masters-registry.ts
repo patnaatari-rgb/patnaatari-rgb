@@ -99,7 +99,6 @@ const SIMPLE_MASTERS: Record<string, { type: MasterListType; column: string }> =
   season: { type: "SEASON", column: "name" },
   unit: { type: "UNIT", column: "name" },
   "crop-type": { type: "CROP_TYPE", column: "name" },
-  "important-day": { type: "IMPORTANT_DAY", column: "name" },
   infrastructure: { type: "INFRASTRUCTURE_TYPE", column: "name" },
   "soil-water": { type: "SOIL_WATER_ANALYSIS_TYPE", column: "name" },
   "equipment-type": { type: "EQUIPMENT_TYPE", column: "name" },

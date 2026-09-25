@@ -23,7 +23,8 @@ request. Each checks the current state first, so re-running is safe.
 | --- | --- |
 | `fix-bank-account-types.ts` | Bank Account Type master: adds "KVK Main Account" and "KVK Revolving Fund", removes "Saving" from the dropdown. Existing bank records keep their saved value. |
 | `fix-cra-master-data.ts` | CRA Cropping System and Farming System masters: adds an "Others" choice and capitalises option text. |
-| `fix-important-day-others.ts` | Important Days master: adds an "Other" choice. |
+| `fix-events-master-merge.ts` | Copies every Important Day master row into Events Master (skipping names already there) after the "Important Days" dropdown was repointed to Events Master. |
+| `fix-important-day-others.ts` | Important Days master: adds an "Other" choice. Superseded by `fix-events-master-merge.ts` - the dropdown no longer reads this master. |
 | `fix-nicra-pi-co-pi-types.ts` | NICRA Project Team Detail roles: ensures PI, Co-PI, Nodal Officer, CCPI and Associate Member exist. Never removes a row. |
 | `fix-staff-post-typo.ts` | Corrects the "Speaclist" misspelling in staff designations. |
 

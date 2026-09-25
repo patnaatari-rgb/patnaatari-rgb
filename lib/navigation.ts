@@ -415,9 +415,6 @@ const otherMasters = group(
       leaf("crop-type", "Crop Type Master", [
         { key: "name", label: "Type Name", formLabel: "Crop Type Name", required: true },
       ]),
-      leaf("important-day", "Important Day Master", [
-        { key: "name", label: "Day Name", required: true },
-      ]),
     ]),
     /**
      * Resource Masters' real page H1 drops the "Master" suffix that the landing
@@ -1559,13 +1556,14 @@ const achievements = group("achievements", "Achievements", [
       { key: "numberOfParticipants", label: "Number of Participants", readonly: true },
       { key: "farmersDetails", label: "Farmers Details", fieldKind: "demographic-breakdown", demographicVariant: "grid", formOnly: true },
     ]),
-    /** Real sidebar label confirmed live: "Celebration of important days", not "Celebration Days". */
-    leaf("celebration-days", "Celebration of important days", [
+    /** Client pointer, 2026-09-25: label now "Celebration of important days/program" everywhere (sidebar, Form Management, Form Summary) - was "Celebration of important days". */
+    leaf("celebration-days", "Celebration of important days/program", [
       { key: "kvk", label: "KVK", readonly: true },
       /** Client pointer, 2026-09-15: "Event Date" replaced by a real Start/End Date pair (same convention as Extension Activities/Technology Week Celebration above). */
       { key: "startDate", label: "Start Date", fieldKind: "date", formOrder: 1, required: true },
       { key: "endDate", label: "End Date", fieldKind: "date", formOrder: 2, required: true },
-      { key: "importantDay", label: "Important Days", sourceMaster: { master: "important-day", optionKey: "name" }, formOrder: 3, required: true },
+      /** Sources from the Events Master (Training & Extension Masters), not a separate "Important Day" master - Super Admin adds new days there and this dropdown must reflect them immediately (client pointer, 2026-09-25: entries added under Events Master weren't showing here because the two master lists used to be unconnected). */
+      { key: "importantDay", label: "Important Days", sourceMaster: { master: "events-master", optionKey: "eventName" }, formOrder: 3, required: true },
       { key: "noOfActivities", label: "No of Activities", formOrder: 4, required: true },
       /** Real Edit form fields confirmed live 2026-08-15 ("Edit Celebration Days") - same two-block shape as Extension Activities above, were entirely missing before this. Both blocks use the real flat grid+badges layout (demographicVariant: "grid", re-confirmed live 2026-09-02). */
       { key: "farmersDetails", label: "Farmers", fieldKind: "demographic-breakdown", demographicPrefix: "farmers", demographicVariant: "grid", formOnly: true },
