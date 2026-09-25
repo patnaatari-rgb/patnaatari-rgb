@@ -121,6 +121,21 @@ type FormsPageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
+/**
+ * A handful of legacy/mistyped records carry a date Postgres accepted but
+ * JS `Date` can't represent (e.g. a 5-digit year typo like "20265" instead
+ * of "2026") - `.toISOString()` throws `RangeError: Invalid time value` for
+ * these instead of returning a string, which crashed this entire route for
+ * every leaf whenever even one such row existed (real incident, 2026-09-25:
+ * one bad Training row's endDate took down the whole Trainings list). Every
+ * date column below goes through this instead of a bare `? .toISOString()… : ""`
+ * ternary so one corrupted row degrades to a blank cell, not a page-wide crash.
+ */
+function fmtDate(d: Date | null | undefined): string {
+  if (!d || Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
 /** One batched query instead of N+1 - groups a pilot leaf's own ModuleImage rows (client PDF, "Module Image workflow", 2026-09-02) by their owning formRecordId so each list row's own Edit page can preload its Photographs section via FormPhotosField's own {url, caption}[] shape. */
 async function moduleImagesByRecord(recordIds: string[]): Promise<Map<string, { url: string; caption: string }[]>> {
   if (recordIds.length === 0) return new Map();
@@ -503,8 +518,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           payBand: r.payBand ?? "",
           payScale: r.payScale ?? "",
           discipline: r.discipline ?? "",
-          dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString().slice(0, 10) : "",
-          dateOfJoining: r.dateOfJoining ? r.dateOfJoining.toISOString().slice(0, 10) : "",
+          dateOfBirth: fmtDate(r.dateOfBirth),
+          dateOfJoining: fmtDate(r.dateOfJoining),
           jobType: r.jobType ?? "",
           allowances: r.allowances ?? "",
           category: r.category ?? "",
@@ -568,7 +583,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         staffName: r.staff.name,
         kvkNameBeforeTransfer: r.fromKvk.name,
         latestKvkName: r.toKvk.name,
-        dateOfRelieving: r.transferDate.toISOString().slice(0, 10),
+        dateOfRelieving: fmtDate(r.transferDate),
         historyJson: JSON.stringify(historyByStaffId.get(r.staffId) ?? []),
       })),
       totalCount: rows.length,
@@ -586,7 +601,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         staffName: r.name,
         position: r.position ?? "",
         sanctionedPost: r.sanctionedPost,
-        dateOfRetirement: r.dateOfRetirement ? r.dateOfRetirement.toISOString().slice(0, 10) : "",
+        dateOfRetirement: fmtDate(r.dateOfRetirement),
       })),
       totalCount: rows.length,
     };
@@ -639,9 +654,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         noOfStaffQuarters: String(r.numberOfQuarters),
-        dateOfCompletion: r.dateOfCompletion
-          ? r.dateOfCompletion.toISOString().slice(0, 10)
-          : "",
+        dateOfCompletion: fmtDate(r.dateOfCompletion),
         remark: r.remark ?? "",
       })),
       totalCount: rows.length,
@@ -828,8 +841,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         reportingYear: String(r.reportingYear),
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         category: r.category,
         subCategory: r.subCategory,
@@ -849,7 +862,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         fldName: r.fld.technologyDemonstrated,
         activity: r.activity,
-        date: r.date.toISOString().slice(0, 10),
+        date: fmtDate(r.date),
         activityCount: String(r.activityCount),
         participantCountMale: r.participantCountMale != null ? String(r.participantCountMale) : "",
         participantCountFemale: r.participantCountFemale != null ? String(r.participantCountFemale) : "",
@@ -886,8 +899,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         moduleImages: JSON.stringify(imagesByRecord.get(r.id) ?? []),
         reportingYear: String(r.reportingYear),
         kvk: r.kvk.name,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         title: r.title,
         venue: r.venue ?? "",
         trainingDiscipline: r.trainingDiscipline ?? "",
@@ -923,8 +936,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         moduleImages: JSON.stringify(imagesByRecord.get(r.id) ?? []),
         reportingYear: String(r.reportingYear),
         kvk: r.kvk.name,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         natureOfExtensionActivity: r.natureOfExtensionActivity,
         noOfActivities: String(r.noOfActivities),
         noOfParticipants: String(r.noOfParticipants),
@@ -962,8 +975,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         natureOfExtensionActivity: r.natureOfExtensionActivity,
         noOfActivities: String(r.noOfActivities),
         staff: r.staff ?? "",
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
       })),
       totalCount: rows.length,
     };
@@ -976,8 +989,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         typeOfActivities: r.typeOfActivities,
         noOfActivities: String(r.noOfActivities),
@@ -1001,8 +1014,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         importantDay: r.importantDay,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         noOfActivities: String(r.noOfActivities),
         farmersGeneralMale: String(r.farmersGeneralMale),
         farmersGeneralFemale: String(r.farmersGeneralFemale),
@@ -1042,7 +1055,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        activityDate: r.activityDate.toISOString().slice(0, 10),
+        activityDate: fmtDate(r.activityDate),
         activitiesConducted: r.activitiesConducted,
         eventName: r.eventName,
         saplingsPlanted: String(r.saplingsPlanted),
@@ -1067,8 +1080,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        fromDate: r.fromDate ? r.fromDate.toISOString().slice(0, 10) : "",
-        toDate: r.toDate ? r.toDate.toISOString().slice(0, 10) : "",
+        fromDate: fmtDate(r.fromDate),
+        toDate: fmtDate(r.toDate),
         totalNoOfActivitiesUndertaken: String(r.totalNoOfActivitiesUndertaken),
         noOfStaffs: String(r.noOfStaffs),
         noOfFarmers: String(r.noOfFarmers),
@@ -1141,8 +1154,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         analysis: r.analysis,
         noOfSamplesAnalyzed: String(r.noOfSamplesAnalyzed),
         noOfVillagesCovered: String(r.noOfVillagesCovered),
@@ -1203,8 +1216,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         staff: r.staff,
         course: r.course,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         venue: r.venue ?? "",
         organizer: r.organizer ?? "",
       })),
@@ -1317,7 +1330,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         season: r.season,
         activityName: r.activityName,
         activitiesOrganized: String(r.activitiesOrganized),
-        date: r.date.toISOString().slice(0, 10),
+        date: fmtDate(r.date),
         placeOfActivity: r.placeOfActivity,
         generalMale: String(r.generalMale),
         generalFemale: String(r.generalFemale),
@@ -1438,8 +1451,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         title: r.title,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         farmersAttended: String(r.farmersAttended),
         generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
         obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
@@ -1460,8 +1473,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         activityName: r.activityName,
         places: r.places,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         farmersAttended: String(r.farmersAttended),
         generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
         obcMale: String(r.obcMale), obcFemale: String(r.obcFemale),
@@ -1480,8 +1493,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         seedBankFodderBank: r.seedBankFodderBank,
         crop: r.crop,
         variety: r.variety,
@@ -1539,12 +1552,10 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         villageName: r.villageName,
-        constitutionDate: r.constitutionDate
-          ? r.constitutionDate.toISOString().slice(0, 10)
-          : "",
+        constitutionDate: fmtDate(r.constitutionDate),
         members: String(r.members),
         meetingsOrganized: String(r.meetingsOrganized),
-        meetingDate: r.meetingDate ? r.meetingDate.toISOString().slice(0, 10) : "",
+        meetingDate: fmtDate(r.meetingDate),
         secretaryName: r.secretaryName ?? "",
       })),
       totalCount: rows.length,
@@ -1558,8 +1569,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         samplesCollected: String(r.samplesCollected),
         samplesAnalysed: String(r.samplesAnalysed),
@@ -1581,8 +1592,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         scheme: r.scheme,
         natureOfWork: r.natureOfWork,
@@ -1602,7 +1613,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         vipExperts: r.vipExperts,
         name: r.name,
-        dateOfVisit: r.dateOfVisit.toISOString().slice(0, 10),
+        dateOfVisit: fmtDate(r.dateOfVisit),
       })),
       totalCount: rows.length,
     };
@@ -1615,8 +1626,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         piCoPi: r.piCoPi,
         name: r.name,
@@ -1629,8 +1640,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         projectTeam: r.projectTeam,
         name: r.name,
@@ -1650,8 +1661,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         enterprise: r.enterprise,
         viableUnits: String(r.viableUnits),
         closedUnits: String(r.closedUnits),
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         groupsFormed: String(r.groupsFormed),
         groupsActive: String(r.groupsActive),
       })),
@@ -1669,9 +1680,9 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         enterprise: r.enterprise,
         totalClosed: String(r.totalClosed),
-        closingDate: r.closingDate ? r.closingDate.toISOString().slice(0, 10) : "",
+        closingDate: fmtDate(r.closingDate),
         totalRestarted: String(r.totalRestarted),
-        restartedDate: r.restartedDate ? r.restartedDate.toISOString().slice(0, 10) : "",
+        restartedDate: fmtDate(r.restartedDate),
       })),
       totalCount: rows.length,
     };
@@ -1685,8 +1696,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         agroClimaticZone: r.agroClimaticZone,
         farmingSituation: r.farmingSituation,
         latitude: String(r.latitude),
@@ -1706,7 +1717,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         activityName: r.activityName,
         trainingTitle: r.trainingTitle,
-        trainingDate: r.trainingDate.toISOString().slice(0, 10),
+        trainingDate: fmtDate(r.trainingDate),
         venue: r.venue,
         participants: String(r.participants),
         generalMale: String(r.generalMale), generalFemale: String(r.generalFemale),
@@ -1984,7 +1995,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         centreName: r.centreName,
         district: r.district,
-        dateOfDemos: r.dateOfDemos.toISOString().slice(0, 10),
+        dateOfDemos: fmtDate(r.dateOfDemos),
         placeOfDemos: r.placeOfDemos,
         cropName: r.cropName,
         noOfDemos: String(r.noOfDemos),
@@ -2026,7 +2037,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         registrationNo: r.registrationNo,
-        dateOfRegistration: r.dateOfRegistration.toISOString().slice(0, 10),
+        dateOfRegistration: fmtDate(r.dateOfRegistration),
         fpoName: r.fpoName,
         fpoAddress: r.fpoAddress ?? "",
         totalBomMembers: String(r.totalBomMembers),
@@ -2064,8 +2075,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         return {
           id: r.id,
           kvk: r.kvk.name,
-          startDate: r.startDate.toISOString().slice(0, 10),
-          endDate: r.endDate.toISOString().slice(0, 10),
+          startDate: fmtDate(r.startDate),
+          endDate: fmtDate(r.endDate),
           training: r.training ?? "",
           flds: r.flds ?? "",
           awarenessCamps: r.awarenessCamps ?? "",
@@ -2122,8 +2133,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         extensionActivity: r.extensionActivity,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         withinOrWithoutState: r.withinOrWithoutState ?? "",
         exposureVisits: String(r.exposureVisits),
         farmersUnderExposure: String(r.farmersUnderExposure),
@@ -2178,7 +2189,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           id: r.id,
           kvk: r.kvk.name,
           programmeName: r.programmeName,
-          programmeDate: r.programmeDate.toISOString().slice(0, 10),
+          programmeDate: fmtDate(r.programmeDate),
           venue: r.venue ?? "",
           purpose: r.purpose ?? "",
           participants: String(r.participants),
@@ -2257,7 +2268,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         reportingYear: r.reportingYear != null ? String(r.reportingYear) : "",
         farmerOrEntrepreneur: r.farmerOrEntrepreneur,
-        dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString().slice(0, 10) : "",
+        dateOfBirth: fmtDate(r.dateOfBirth),
         education: r.education ?? "",
         experience: r.experience ?? "",
         cellNoEmail: r.cellNoEmail ?? "",
@@ -2462,9 +2473,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         noOfStaffQuarters: String(r.noOfStaffQuarters),
-        dateOfCompletion: r.dateOfCompletion
-          ? r.dateOfCompletion.toISOString().slice(0, 10)
-          : "",
+        dateOfCompletion: fmtDate(r.dateOfCompletion),
         remark: r.remark ?? "",
         whetherCompleted: r.whetherCompleted ?? "",
         occupancyDetails: r.occupancyDetails ?? "",
@@ -2500,8 +2509,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         salaryAllocation: String(r.salaryAllocation),
         salaryExpenditure: String(r.salaryExpenditure),
         generalGrantAllocation: String(r.generalGrantAllocation),
@@ -2529,8 +2538,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         projectName: r.projectName,
         accountNumber: r.accountNumber ?? "",
         fundingAgency: r.fundingAgency ?? "",
@@ -2571,8 +2580,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         headName: r.headName,
         income: String(r.income),
         sponsoringAgency: r.sponsoringAgency ?? "",
@@ -2589,8 +2598,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate ? r.startDate.toISOString().slice(0, 10) : "",
-        endDate: r.endDate ? r.endDate.toISOString().slice(0, 10) : "",
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         programmeName: r.programmeName,
         purpose: r.purpose ?? "",
         sourcesOfFund: r.sourcesOfFund ?? "",
@@ -2631,7 +2640,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         purpose: r.purpose ?? "",
         fundingAgency: r.fundingAgency ?? "",
         amount: r.amount !== null ? String(r.amount) : "",
-        initiationDate: r.initiationDate ? r.initiationDate.toISOString().slice(0, 10) : "",
+        initiationDate: fmtDate(r.initiationDate),
       })),
       totalCount: rows.length,
     };
@@ -2645,8 +2654,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         participants: String(r.participants),
         statutoryMembers: String(r.statutoryMembers),
         recommendations: r.recommendations ?? "",
@@ -2666,7 +2675,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        date: r.date.toISOString().slice(0, 10),
+        date: fmtDate(r.date),
         meetingType: r.meetingType,
         agenda: r.agenda ?? "",
         representativeFromAtari: r.representativeFromAtari ?? "",
@@ -2685,7 +2694,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         diseaseName: r.diseaseName,
         crop: r.crop,
-        outbreakDate: r.outbreakDate.toISOString().slice(0, 10),
+        outbreakDate: fmtDate(r.outbreakDate),
         areaAffected: String(r.areaAffected),
         commodityLossPercent: String(r.commodityLossPercent),
         preventiveMeasures: r.preventiveMeasures ?? "",
@@ -2704,7 +2713,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         kvk: r.kvk.name,
         diseaseName: r.diseaseName,
         speciesAffected: r.speciesAffected,
-        outbreakDate: r.outbreakDate.toISOString().slice(0, 10),
+        outbreakDate: fmtDate(r.outbreakDate),
         mortalityMorbidity: r.mortalityMorbidity ?? "",
         animalsVaccinated: String(r.animalsVaccinated),
         preventiveMeasures: r.preventiveMeasures ?? "",
@@ -2722,8 +2731,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         id: r.id,
         kvk: r.kvk.name,
         programmeTitle: r.programmeTitle,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         male: String(r.male),
         female: String(r.female),
         generalMale: String(r.generalMale),
@@ -2750,7 +2759,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         return {
           id: r.id,
           kvk: r.kvk.name,
-          date: r.date.toISOString().slice(0, 10),
+          date: fmtDate(r.date),
           title: r.title,
           type: r.type ?? "",
           venue: r.venue ?? "",
@@ -2799,8 +2808,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
-        startDate: r.startDate.toISOString().slice(0, 10),
-        endDate: r.endDate.toISOString().slice(0, 10),
+        startDate: fmtDate(r.startDate),
+        endDate: fmtDate(r.endDate),
         kvk: r.kvk.name,
         attachmentType: r.attachmentType,
         attachment: r.attachment ?? "",
@@ -2821,7 +2830,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
-        visitDate: r.visitDate.toISOString().slice(0, 10),
+        visitDate: fmtDate(r.visitDate),
         dignitaryType: r.dignitaryType,
         ministerName: r.ministerName,
         observations: r.observations ?? "",
