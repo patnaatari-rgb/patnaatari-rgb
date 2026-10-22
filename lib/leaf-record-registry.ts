@@ -51,8 +51,17 @@ const int = (v: string | undefined) => (v?.trim() ? parseInt(v, 10) : undefined)
 const reqInt = (v: string | undefined) => parseInt(v ?? "0", 10) || 0;
 const dec = (v: string | undefined) => (v?.trim() ? Number(v) : undefined);
 const reqDec = (v: string | undefined) => Number(v) || 0;
-const date = (v: string | undefined) => (v?.trim() ? new Date(v) : undefined);
-const reqDate = (v: string | undefined) => new Date(v ?? Date.now());
+/** A date input lets a partly typed year through ("0202-03-16" while typing 2026), and JS/Postgres accept it as a real year-202 date. Rejecting it here keeps it out of the data and out of the Reporting Year lists. */
+function checkedDate(v: string): Date {
+  const d = new Date(v);
+  const year = d.getUTCFullYear();
+  if (Number.isNaN(d.getTime()) || year < 1900 || year > 2100) {
+    throw new Error("Enter a valid date with a full 4-digit year (e.g. 2026).");
+  }
+  return d;
+}
+const date = (v: string | undefined) => (v?.trim() ? checkedDate(v) : undefined);
+const reqDate = (v: string | undefined) => (v === undefined ? new Date() : checkedDate(v));
 const bool = (v: string | undefined) => v?.trim().toLowerCase() === "yes" || v?.trim().toLowerCase() === "true";
 /** Inclusive day count between two dates (e.g. 1st-3rd = 3 days stayed, not 2) - for a leaf whose real reference form has no separate "days stayed" input, just Start/End Date, with the duration shown read-only in the list table (e.g. RAWE/FET/FIT Programme). */
 const daysBetween = (start: Date, end: Date) => Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1);

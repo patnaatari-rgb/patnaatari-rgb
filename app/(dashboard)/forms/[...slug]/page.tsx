@@ -2306,6 +2306,62 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
       })),
       totalCount: rows.length,
     };
+  } else if (user && node.type === "leaf" && node.slug === "district-crop-productivity") {
+    const rows = await prisma.districtCropProductivity.findMany({
+      where: kvkScope,
+      include: { kvk: true },
+      orderBy: { createdAt: "desc" },
+    });
+    formData = {
+      rows: rows.map((r) => ({
+        id: r.id,
+        kvk: r.kvk.name,
+        season: r.season,
+        type: r.type,
+        cropName: r.cropName,
+        areaHa: String(r.areaHa),
+        productionMt: String(r.productionMt),
+        productivityQha: String(r.productivityQha),
+        remarks: r.remarks ?? "",
+      })),
+      totalCount: rows.length,
+    };
+  } else if (user && node.type === "leaf" && node.slug === "district-monthly-weather") {
+    const rows = await prisma.districtMonthlyWeather.findMany({
+      where: kvkScope,
+      include: { kvk: true },
+      orderBy: { createdAt: "desc" },
+    });
+    formData = {
+      rows: rows.map((r) => ({
+        id: r.id,
+        kvk: r.kvk.name,
+        month: r.month,
+        rainfallMm: r.rainfallMm != null ? String(r.rainfallMm) : "",
+        maxTempC: r.maxTempC != null ? String(r.maxTempC) : "",
+        minTempC: r.minTempC != null ? String(r.minTempC) : "",
+        maxRhPct: r.maxRhPct != null ? String(r.maxRhPct) : "",
+        minRhPct: r.minRhPct != null ? String(r.minRhPct) : "",
+        remarks: r.remarks ?? "",
+      })),
+      totalCount: rows.length,
+    };
+  } else if (user && node.type === "leaf" && node.slug === "district-livestock-production") {
+    const rows = await prisma.districtLivestockProduction.findMany({
+      where: kvkScope,
+      include: { kvk: true },
+      orderBy: { createdAt: "desc" },
+    });
+    formData = {
+      rows: rows.map((r) => ({
+        id: r.id,
+        kvk: r.kvk.name,
+        livestockName: r.livestockName,
+        number: String(r.number),
+        remarks: r.remarks ?? "",
+      })),
+      totalCount: rows.length,
+    };
   } else if (user && node.type === "leaf" && node.slug === "operational-area-details") {
     const rows = await prisma.operationalAreaDetail.findMany({
       where: kvkScope,

@@ -384,6 +384,11 @@ export async function distinctReportingYears(scope: {
   return years;
 }
 
+/** A mistyped date (e.g. "0202-03-16" while typing 2026) is stored as a real year-202 date; it must not show up as a selectable Reporting Year. The record itself still counts under "All". */
+function isPlausibleYear(year: number): boolean {
+  return Number.isInteger(year) && year >= 1900 && year <= 2100;
+}
+
 async function computeDistinctReportingYears(scope: {
   kvkId?: string | { in: string[] };
   zoneId: string;
@@ -412,7 +417,7 @@ async function computeDistinctReportingYears(scope: {
       });
       for (const row of rows) {
         const y = row[field];
-        if (typeof y === "number" && Number.isFinite(y)) years.add(y);
+        if (typeof y === "number" && isPlausibleYear(y)) years.add(y);
       }
     }),
     ...dateFieldModels.map(async ([model, fields]) => {
@@ -427,7 +432,7 @@ async function computeDistinctReportingYears(scope: {
       for (const row of rows) {
         for (const f of fields) {
           const d = row[f];
-          if (d instanceof Date) years.add(d.getFullYear());
+          if (d instanceof Date && isPlausibleYear(d.getFullYear())) years.add(d.getFullYear());
         }
       }
     }),
