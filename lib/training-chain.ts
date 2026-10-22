@@ -54,3 +54,17 @@ export function buildTrainingChainResolver(masters: TrainingMasters): (row: Trai
     return { type, area, thematic: thematic ?? fallback(row.thematicArea) };
   };
 }
+
+/**
+ * The Clientele Wise table (2.4.C) groups by the same seven names the Training
+ * Type dropdown offers; a clientele typed under "Other" (or any name outside
+ * that list) is grouped under "Other". A blank stays "Not specified".
+ */
+export function buildClienteleResolver(allowed: string[]): (clientele: string | null) => string {
+  const names = new Map<string, string>();
+  for (const name of allowed) names.set(norm(name), name);
+  return (clientele) => {
+    if (norm(clientele) === "") return UNSPECIFIED_LABEL;
+    return names.get(norm(clientele)) ?? OTHER_LABEL;
+  };
+}

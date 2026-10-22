@@ -10,6 +10,8 @@ export type ReportExcelOptions = {
   title: string;
   zoneLabel: string;
   reportingYearLabel: string;
+  /** Filters the list was narrowed by (e.g. "State: Bihar | On Campus"). */
+  filterLabel?: string;
   kvkNames: string[];
   sections: ReportSection[];
   /** Module-Image url -> data-URL, pre-fetched by the caller. */
@@ -191,7 +193,7 @@ export async function generateReportExcel(opts: ReportExcelOptions): Promise<Exc
   contents.getCell("A2").value = opts.title;
   contents.getCell("A2").font = { bold: true, size: 13 };
   contents.mergeCells("A3:B3");
-  contents.getCell("A3").value = `Reporting Year: ${opts.reportingYearLabel}`;
+  contents.getCell("A3").value = `Reporting Year: ${opts.reportingYearLabel}${opts.filterLabel ? `  |  Filters: ${opts.filterLabel}` : ""}`;
   contents.getCell("A3").font = { italic: true, size: 10, color: { argb: "FF555555" } };
   contents.mergeCells("A4:B4");
   contents.getCell("A4").value = `KVKs Included (${opts.kvkNames.length}): ${opts.kvkNames.join(", ")}`;

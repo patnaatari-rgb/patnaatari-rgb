@@ -15,6 +15,8 @@ export type ReportPdfOptions = {
   title: string; // "ATARI AMS REPORT"
   zoneLabel: string; // "ATARI ZONE-4"
   reportingYearLabel: string; // "All Data" or a specific year
+  /** Filters the list was narrowed by (e.g. "State: Bihar | On Campus"), named on the cover and in the running header. */
+  filterLabel?: string;
   kvkNames: string[];
   sections: ReportSection[];
   /** Module-Image url -> data-URL (pre-fetched by the caller, since the file proxy needs the browser session). */
@@ -65,7 +67,7 @@ function reportRunningHeader(opts: ReportPdfOptions): string {
     : headerToken(opts.zoneLabel.replace(/^ATARI\s+/i, ""));
   const kvkSeg =
     opts.kvkNames.length === 1 ? headerToken(opts.kvkNames[0]) : "ALL-KVKS";
-  const periodSeg = headerToken(opts.reportingYearLabel || "All Data");
+  const periodSeg = headerToken(opts.reportingYearLabel || "All Data") + (opts.filterLabel ? `-${headerToken(opts.filterLabel)}` : "");
   return `ICAR-ATARI/${zoneSeg}/${kvkSeg}/REPORT-${periodSeg}`;
 }
 
@@ -353,10 +355,11 @@ export function generateReportPdf(opts: ReportPdfOptions) {
   doc.setFontSize(11);
   doc.setTextColor(60, 60, 60);
   doc.text(`Reporting Year: ${opts.reportingYearLabel}`, pageW / 2, 76, { align: "center" });
+  if (opts.filterLabel) doc.text(`Filters: ${opts.filterLabel}`, pageW / 2, 82, { align: "center" });
 
   // The "KVKS INCLUDED" box hugs its content - a single-KVK / per-section
   // download shouldn't stretch a near-empty box down the whole page.
-  const boxTop = 86;
+  const boxTop = opts.filterLabel ? 92 : 86;
   const cols = opts.kvkNames.length <= 6 ? 1 : 4;
   const perCol = Math.ceil(opts.kvkNames.length / cols);
   const boxBottom = Math.min(boxTop + 18 + perCol * 5.2 + 4, pageH - 16);

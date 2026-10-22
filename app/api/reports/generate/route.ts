@@ -101,10 +101,22 @@ export async function GET(request: Request) {
     kvkId = match?.id;
   }
 
+  // The Trainings list's State and On Campus/Off Campus dropdowns reach the report as column filters. They are
+  // only honoured (and only named on the cover) for the Training report, the one builder that reads them.
+  const isTrainingReport = subsectionLeaf === "achievements/trainings";
+  const pickedStates = isTrainingReport ? (columnValuesArg?.state ?? []).filter((s) => typeof s === "string") : [];
+  const pickedCampus = isTrainingReport ? (columnValuesArg?.onCampusOffCampus ?? []).filter((s) => typeof s === "string") : [];
+  const filterLabel = [pickedStates.length > 0 ? `State: ${pickedStates.join(", ")}` : "", pickedCampus.length > 0 ? pickedCampus.join(", ") : ""]
+    .filter(Boolean)
+    .join(" | ");
+
   const [zone, kvks] = await Promise.all([
     prisma.zone.findUnique({ where: { id: auth.session.zoneId }, select: { name: true } }),
     prisma.kvk.findMany({
-      where: kvkId ? { id: kvkId } : { zoneId: auth.session.zoneId },
+      where: {
+        ...(kvkId ? { id: kvkId } : { zoneId: auth.session.zoneId }),
+        ...(pickedStates.length > 0 ? { state: { name: { in: pickedStates } } } : {}),
+      },
       select: { name: true },
       orderBy: { name: "asc" },
     }),
@@ -153,6 +165,7 @@ export async function GET(request: Request) {
     zoneLabel: zone?.name ? zoneReportLabel(zone.name) : "ATARI",
     kvkNames: kvks.map((k) => k.name),
     periodLabel: reportPeriodLabel(fromDate, toDate, yearsArg),
+    ...(filterLabel ? { filterLabel } : {}),
     sections,
     ...(matched === undefined ? {} : { matched }),
   });

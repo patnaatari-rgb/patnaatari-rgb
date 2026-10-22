@@ -1059,6 +1059,7 @@ export function EmptyDataTable({
           (data.periodLabel as string) ||
           (reportingYears.size > 0 ? Array.from(reportingYears).sort().join(", ") : "All Data"),
         kvkNames,
+        filterLabel: (data.filterLabel as string | undefined) || undefined,
         sections,
         images: await prefetchReportImages(sections),
       };

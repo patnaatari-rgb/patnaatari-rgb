@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTrainingChainResolver, type TrainingMasters } from "@/lib/training-chain";
+import { buildClienteleResolver, buildTrainingChainResolver, type TrainingMasters } from "@/lib/training-chain";
 
 const MASTERS: TrainingMasters = {
   types: ["Farmers and Farm Women", "Rural Youth", "Skill Development Training", "Other"],
@@ -74,5 +74,35 @@ describe("training chain resolver", () => {
       area: "Crop Production",
       thematic: "Not specified",
     });
+  });
+});
+
+describe("clientele resolver", () => {
+  const SEVEN = [
+    "Extension Personnel/Functionaries",
+    "Farmers and Farm Women",
+    "Rural Youth",
+    "Skill Development Training",
+    "Sponsored Training",
+    "Vocational Training",
+    "Other",
+  ];
+  const clienteleOf = buildClienteleResolver(SEVEN);
+
+  it("keeps the seven names, ignoring case and spacing", () => {
+    expect(clienteleOf("Farmers and Farm Women")).toBe("Farmers and Farm Women");
+    expect(clienteleOf("Sponsored training")).toBe("Sponsored Training");
+    expect(clienteleOf(" skill  development training ")).toBe("Skill Development Training");
+  });
+
+  it("groups any other name under Other", () => {
+    for (const typed of ["SHG Members", "Awareness Programme", "Training", "DAESI", "Armed Forces", "Makhana Farmer", "Students"]) {
+      expect(clienteleOf(typed)).toBe("Other");
+    }
+  });
+
+  it("leaves a blank as Not specified", () => {
+    expect(clienteleOf(null)).toBe("Not specified");
+    expect(clienteleOf("  ")).toBe("Not specified");
   });
 });

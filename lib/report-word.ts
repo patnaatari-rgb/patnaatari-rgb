@@ -15,6 +15,8 @@ export type ReportWordOptions = {
   title: string;
   zoneLabel: string;
   reportingYearLabel: string;
+  /** Filters the list was narrowed by (e.g. "State: Bihar | On Campus"). */
+  filterLabel?: string;
   kvkNames: string[];
   sections: ReportSection[];
   /** Module-Image url -> data-URL, pre-fetched by the caller. */
@@ -235,7 +237,8 @@ export async function generateReportWord(opts: ReportWordOptions): Promise<Blob>
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 60 }, children: [new TextRun({ text: "Agricultural Technology Application", bold: true, size: 24 })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: "Research Institute (ATARI)", bold: true, size: 24 })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 100 }, children: [new TextRun({ text: opts.title, bold: true, size: 48, color: GREEN })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [new TextRun({ text: `Reporting Year: ${opts.reportingYearLabel}`, bold: true, size: 22 })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: opts.filterLabel ? 100 : 400 }, children: [new TextRun({ text: `Reporting Year: ${opts.reportingYearLabel}`, bold: true, size: 22 })] }),
+    ...(opts.filterLabel ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [new TextRun({ text: `Filters: ${opts.filterLabel}`, bold: true, size: 22 })] })] : []),
     new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: `KVKS INCLUDED (${opts.kvkNames.length})`, bold: true })] }),
     new Paragraph({ spacing: { after: 400 }, children: [new TextRun({ text: opts.kvkNames.map((n, i) => `${i + 1}. ${n}`).join("   |   ") })] }),
     new Paragraph({ children: [new PageBreak()] }),

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { buildTrainingChainResolver } from "@/lib/training-chain";
+import { buildClienteleResolver, buildTrainingChainResolver } from "@/lib/training-chain";
 import { MONTH_NAMES } from "@/lib/months";
 import { modelDelegate, type DynamicRow } from "@/lib/prisma-delegate";
 import { NF_COMPARISON_PARAMETERS, applyListFilter } from "./report-types";
@@ -1861,6 +1861,10 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
     stFemale: (t: T) => String(t.stFemale),
   });
 
+  // The tables are titled "(On & Off Campus)"; when the list was narrowed to one campus type they cover only that one.
+  const campusPicked = scope.listFilter?.columnValues?.onCampusOffCampus;
+  const campusTitle = campusPicked?.length === 1 ? campusPicked[0] : "On & Off Campus";
+
   // --- State-wise ---
   const stateColumns: ReportColumn[] = [
     { key: "row", label: "State" },
@@ -1876,7 +1880,6 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
     { key: "courses", label: "No. of Courses" },
     ...casteMftColumns("No. of Participants"),
   ];
-  const label = (v: string | null) => v?.trim() || "Not specified";
   // A name typed under "Other" in the Add form is saved as typed, so the data holds Types, Areas and
   // Thematic Areas the masters never had; the consolidate tables show only what the masters define and
   // group the rest under "Other".
@@ -1885,6 +1888,8 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
     areas: areaMasters.map((m) => ({ type: m.trainingType.name, name: m.name })),
     themes: themeMasters.map((m) => ({ type: m.trainingArea.trainingType.name, area: m.trainingArea.name, name: m.name })),
   });
+  // Clientele Wise groups by the same seven names the Training Type dropdown offers; the rest is "Other".
+  const clienteleOf = buildClienteleResolver(typeMasters.map((m) => m.name));
   /** Pinned thematic areas missing from a Crop Production band; they get a zero row so the band is always complete. */
   const missingPinned = (area: string, present: Iterable<string>): string[] => {
     if (area !== "Crop Production") return [];
@@ -1900,7 +1905,7 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
    */
   const consolidateBlocks = (outerField: "trainingType" | "clientele"): ReportBlock[] => {
     const blocks: ReportBlock[] = [];
-    for (const [outer, outerRows] of groupInto(trainings, (t) => (outerField === "trainingType" ? chainOf(t).type : label(t.clientele)))) {
+    for (const [outer, outerRows] of groupInto(trainings, (t) => (outerField === "trainingType" ? chainOf(t).type : clienteleOf(t.clientele)))) {
       const rows: Record<string, string>[] = [];
       for (const [area, areaRows] of groupInto(outerRows, (t) => chainOf(t).area)) {
         rows.push({ row: area });
@@ -2018,7 +2023,7 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
   if (scope.kvkId) {
     return {
       blocks: [
-        { heading: "2.4.A - Consolidate table (On & Off Campus) Training Type Wise", parts: [] },
+        { heading: `2.4.A - Consolidate table (${campusTitle}) Training Type Wise`, parts: [] },
         ...consolidateBlocks("trainingType"),
         { heading: "2.4.B - Separate On Campus and Off Campus Training Type Wise", parts: [] },
         ...separateCampusBlocks(),
@@ -2050,9 +2055,9 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
               ],
             },
           ]),
-      { heading: "2.4.A - Consolidate table (On & Off Campus) Training Type Wise", parts: [] },
+      { heading: `2.4.A - Consolidate table (${campusTitle}) Training Type Wise`, parts: [] },
       ...consolidateBlocks("trainingType"),
-      { heading: "2.4.C - Consolidate table (On & Off Campus) Clientele Wise", parts: [] },
+      { heading: `2.4.C - Consolidate table (${campusTitle}) Clientele Wise`, parts: [] },
       ...consolidateBlocks("clientele"),
     ],
   };
