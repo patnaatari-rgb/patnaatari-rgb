@@ -208,6 +208,27 @@ export const MODEL_PERIOD_YEAR_FIELD: Record<string, string> = {
   nfBeneficiary: "reportingYear",
   agriDroneIntroduction: "year",
   districtLevelData: "reportingYear",
+  districtCropProductivity: "reportingYear",
+  districtMonthlyWeather: "reportingYear",
+  districtLivestockProduction: "reportingYear",
+  rainWaterHarvesting: "reportingYear",
+  cfldBudgetUtilization: "reportingYear",
+  cfldCropWiseImage: "reportingYear",
+  nicraDetails: "reportingYear",
+  nicraCustomHiringFarmImplement: "reportingYear",
+  nfDemonstrationInfo: "reportingYear",
+  nfSoilData: "reportingYear",
+  nfBudgetExpenditure: "reportingYear",
+  subPlanActivity: "reportingYear",
+  nariNutritionGarden: "reportingYear",
+  nariBioFortified: "reportingYear",
+  nariValueAddition: "reportingYear",
+  nariTraining: "reportingYear",
+  nariExtension: "reportingYear",
+  fpoCbboDetail: "reportingYear",
+  drmrDetail: "reportingYear",
+  craDetail: "reportingYear",
+  seedHubProgram: "reportingYear",
   operationalAreaDetail: "reportingYear",
   villageAdoptionProgramme: "reportingYear",
   priorityThrustArea: "reportingYear",
@@ -2985,7 +3006,7 @@ function buildSubPlanByType(type: "TSP" | "SCSP") {
       // | No. of Farmers" table, then b. Fund received, c. physical outcome, d.
       // Location & Beneficiary Details (from the locationBeneficiaries JSON).
       const rawRecs = await prisma.subPlanActivity.findMany({
-        where: { type, kvkId: scope.kvkId },
+        where: { type, kvkId: scope.kvkId, ...periodClause(scope, "subPlanActivity") },
         select: { activities: true, noOfTraining: true, beneficiaries: true, fundReceivedLakh: true, physicalOutcomeNote: true, locationBeneficiaries: true },
       });
       // Real bug fix, 2026-09-14 - blocks (grouped by fixed activity name).
@@ -3058,7 +3079,7 @@ function buildSubPlanByType(type: "TSP" | "SCSP") {
       return { blocks };
     }
     const rows = await prisma.subPlanActivity.findMany({
-      where: { type, zoneId: scope.zoneId },
+      where: { type, zoneId: scope.zoneId, ...periodClause(scope, "subPlanActivity") },
       select: { activities: true, noOfTraining: true, beneficiaries: true, kvk: { select: { state: { select: { name: true } } } } },
     });
     const stateNames = await reportStates(scope.zoneId);
@@ -3116,7 +3137,7 @@ function buildNariKvk(
   return async (scope: ReportScope): Promise<CustomTableResult> => {
     const kvkId = scope.kvkId as string;
     const rawRecords: DynamicRow[] = await modelDelegate(model).findMany({
-      where: { kvkId },
+      where: { kvkId, ...periodClause(scope, model) },
       include: { kvk: { select: { name: true } } },
       orderBy: { createdAt: "asc" },
     });
@@ -3816,9 +3837,9 @@ async function buildDistrictLevelData(scope: ReportScope): Promise<CustomTableRe
       where: { ...where, ...periodClause(scope, "districtLevelData") },
       select: { items: true, information: true, reportingYear: true, kvk: { select: { name: true } } },
     }),
-    prisma.districtCropProductivity.findMany({ where, select: { season: true, type: true, cropName: true, areaHa: true, productionMt: true, productivityQha: true, remarks: true } }),
-    prisma.districtMonthlyWeather.findMany({ where, select: { month: true, rainfallMm: true, maxTempC: true, minTempC: true, maxRhPct: true, minRhPct: true, remarks: true } }),
-    prisma.districtLivestockProduction.findMany({ where, select: { livestockName: true, number: true, remarks: true } }),
+    prisma.districtCropProductivity.findMany({ where: { ...where, ...periodClause(scope, "districtCropProductivity") }, select: { season: true, type: true, cropName: true, areaHa: true, productionMt: true, productivityQha: true, remarks: true } }),
+    prisma.districtMonthlyWeather.findMany({ where: { ...where, ...periodClause(scope, "districtMonthlyWeather") }, select: { month: true, rainfallMm: true, maxTempC: true, minTempC: true, maxRhPct: true, minRhPct: true, remarks: true } }),
+    prisma.districtLivestockProduction.findMany({ where: { ...where, ...periodClause(scope, "districtLivestockProduction") }, select: { livestockName: true, number: true, remarks: true } }),
   ]);
   // Real bug fix, 2026-09-14 - this leaf's own list (kvk/reportingYear/items/
   // information) filters only this first block; the other 3 blocks are each
@@ -5641,7 +5662,7 @@ async function buildNicraDetails(scope: ReportScope): Promise<CustomTableResult>
     // with a caste M/F beneficiary block + Total, Gross cost / Gross return /
     // Net return / BCR, and Sub-total (per sub-category) + Total (per category) rows.
     const records = await prisma.nicraDetails.findMany({
-      where: { kvkId: scope.kvkId },
+      where: { kvkId: scope.kvkId, ...periodClause(scope, "nicraDetails") },
       select: {
         category: true, subCategory: true, cropName: true, seasonName: true, month: true,
         technologyDemonstration: true, areaOrUnit: true, yield: true,
@@ -5702,7 +5723,7 @@ async function buildNicraDetails(scope: ReportScope): Promise<CustomTableResult>
   }
   const [records, stateNames] = await Promise.all([
     prisma.nicraDetails.findMany({
-      where: { zoneId: scope.zoneId },
+      where: { zoneId: scope.zoneId, ...periodClause(scope, "nicraDetails") },
       select: {
         category: true, subCategory: true, noOfFarmers: true, areaOrUnit: true, netReturn: true,
         kvk: { select: { state: { select: { name: true } } } },

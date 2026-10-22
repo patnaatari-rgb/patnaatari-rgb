@@ -12,7 +12,11 @@ const ORG_CTX = { kvkId: null, kvkIds: ["kvk-2", "kvk-3"], zoneId: "zone-1" };
 beforeEach(resetCalls);
 
 /** 3+4+5+5+3+5+3+3 = 31 */
-const GRID = Object.fromEntries(DEMOGRAPHIC_KEYS.map((key, i) => [key, String([3, 4, 5, 5, 3, 5, 3, 3][i])]));
+/** `reportingYear` rides along because some leaves with a beneficiary grid (NICRA Details, CRA Details, ...) now require one. */
+const GRID = {
+  ...Object.fromEntries(DEMOGRAPHIC_KEYS.map((key, i) => [key, String([3, 4, 5, 5, 3, 5, 3, 3][i])])),
+  reportingYear: "2026",
+};
 const GRID_TOTAL = 31;
 
 const autoTotals = formLeaves.flatMap(({ path, leaf }) =>

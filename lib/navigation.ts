@@ -278,6 +278,18 @@ const PROJECT_TEAM_ROLES = ["PI", "Co-PI", "Nodal Officer", "Associate Member"];
 /** Calendar-order month choices for every "Month" field, so a month is picked instead of typed (client direction, 2026-09-21). */
 const MONTH_OPTIONS: string[] = [...MONTH_NAMES];
 
+/** Required Reporting Year dropdown for a leaf: the recent years plus every year the leaf itself already has (`yearsModel`, a key of MODEL_PERIOD_YEAR_FIELD in lib/report-data.ts). */
+function yearColumn(yearsModel: string): MasterColumn {
+  return {
+    key: "reportingYear",
+    label: "Reporting Year",
+    required: true,
+    placeholder: "Select",
+    staticOptions: Array.from({ length: 4 }, (_, i) => String(new Date().getFullYear() - i)),
+    yearsModel,
+  };
+}
+
 function leaf(
   slug: string,
   label: string,
@@ -2069,6 +2081,7 @@ const projects = group(
       /** Columns confirmed against the client's own live atariams.org "Budget Utilization" screenshot (2026-08-24) - a simpler, more current structure than the earlier manual screenshot's Items/Budget Received/Budget Utilization/Balance breakdown. */
       leaf("budget-utilization", "Budget Utilization", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("cfldBudgetUtilization"),
         { key: "crop", label: "Crop", required: true },
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "overallFundAllocation", label: "Overall Fund Allocation", required: true },
@@ -2119,6 +2132,7 @@ const projects = group(
       /** New leaf, confirmed against the client's own "Crop wise Photographs" screenshot (AMS User Manual p.27) - not present before this pass. */
       leaf("crop-wise-images", "Crop Wise Images", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("cfldCropWiseImage"),
         { key: "crop", label: "Crop", required: true },
         { key: "image", label: "Image", fileKind: "image", uploadKind: "cfld-crop-image" },
       ]),
@@ -2161,6 +2175,7 @@ const projects = group(
       ]),
       leaf("details", "Details", [
         { key: "kvk", label: "KVK", readonly: true },
+        yearColumn("nicraDetails"),
         { key: "cropName", label: "Crop Name", required: true },
         { key: "seasonName", label: "Season Name", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "technologyDemonstration", label: "Technology demonstration", required: true },
@@ -2219,6 +2234,7 @@ const projects = group(
           "Custom Hiring of Farm-Implement",
           [
             { key: "kvk", label: "KVK", readonly: true },
+            yearColumn("nicraCustomHiringFarmImplement"),
             {
               key: "farmImplementName",
               label: "Name of farm implement/equipment",
@@ -2405,6 +2421,7 @@ const projects = group(
       ]),
       leaf("nf-demonstration", "Demonstration Information", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("nfDemonstrationInfo"),
         { key: "farmerName", label: "Farmer Name", required: true },
         { key: "activityName", label: "Name of Activity", required: true },
         { key: "crop", label: "Crop", required: true },
@@ -2466,6 +2483,7 @@ const projects = group(
       ]),
       leaf("nf-soil-data", "Soil Data information", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("nfSoilData"),
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "type", label: "Soil Type", required: true },
         { key: "crop", label: "Crop", required: true },
@@ -2487,6 +2505,7 @@ const projects = group(
       ]),
       leaf("nf-budget-expenditure", "Budget Expenditure", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("nfBudgetExpenditure"),
         { key: "activityName", label: "Name of Activity", required: true },
         { key: "activitiesOrganised", label: "Number of activity organised", required: true },
         { key: "budgetSanction", label: "Budget Receipt (Rs)", required: true },
@@ -2519,6 +2538,7 @@ const projects = group(
     group("tsp-scsp", "TSP/SCSP", [
       leaf("view-sub-plan-activity", "View Sub Plan Activity", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("subPlanActivity"),
         { key: "type", label: "Type", required: true, sourceMaster: { master: "tsp-scsp-type", optionKey: "name" } },
         { key: "activities", label: "Activities", required: true, sourceMaster: { master: "tsp-scsp-activity", optionKey: "name" } },
         { key: "noOfTraining", label: "No of Training", required: true },
@@ -2548,6 +2568,7 @@ const projects = group(
         "Details of established Nutrition Garden in Nutri-Smart village",
         [
           { key: "kvk", label: "KVK Name", readonly: true },
+          yearColumn("nariNutritionGarden"),
           { key: "nutriSmartVillage", label: "Name of Nutri-Smart Village", required: true },
           {
             key: "typeOfNutritionalGarden",
@@ -2566,6 +2587,7 @@ const projects = group(
         "Details of Bio-fortified crops used in Nutri-Smart village",
         [
           { key: "kvk", label: "KVK Name", readonly: true },
+          yearColumn("nariBioFortified"),
           { key: "nutriSmartVillage", label: "Name of Nutri-Smart Village", required: true },
           { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
           { key: "activity", label: "Activity", required: true, sourceMaster: { master: "nari-activity", optionKey: "name" } },
@@ -2583,6 +2605,7 @@ const projects = group(
         "Details of Value addition in Nutri-Smart village",
         [
           { key: "kvk", label: "KVK Name", readonly: true },
+          yearColumn("nariValueAddition"),
           { key: "nutriSmartVillage", label: "Name of Nutri-Smart Village", required: true },
           { key: "cropName", label: "Name of Crop", required: true },
           { key: "valueAddedProduct", label: "Name of Value-added product", required: true },
@@ -2593,6 +2616,7 @@ const projects = group(
       ),
       leaf("nari-training", "Training programmes in Nutri-Smart village", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("nariTraining"),
         { key: "nutriSmartVillage", label: "Name of Nutri-Smart Village", required: true },
         { key: "areaOfTraining", label: "Area of Training", required: true, numeric: false },
         { key: "activity", label: "Activity", required: true },
@@ -2605,6 +2629,7 @@ const projects = group(
       ]),
       leaf("nari-extension", "Extension activities under NARI Project", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("nariExtension"),
         { key: "nutriSmartVillage", label: "Name of Nutri-Smart Village", required: true },
         { key: "activity", label: "Activity", required: true },
         { key: "nameOfActivity", label: "Name of Activity", required: true },
@@ -2666,6 +2691,7 @@ const projects = group(
       /** Columns confirmed against the client's own "Formation and Promotion of FPOs as CBBOs under NCDC funding" list + Add screenshots (AMS User Manual p.33-34) - the Add form collects several more fields than the list shows, but a custom multi-field form wasn't built for this leaf; it uses the generic per-column form like every other Projects sub-leaf. */
       leaf("fpo-cbbo-details", "Details FPO and CBBO", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("fpoCbboDetail"),
         { key: "noOfBlocksAllocated", label: "No. of Blocks Allocated", required: true },
         {
           key: "noOfFposRegistered",
@@ -2738,6 +2764,7 @@ const projects = group(
       /** Columns confirmed against the client's own "Augmenting Rapeseed-Mustard Production..." (DRMR) screenshot (AMS User Manual p.35). A 6th column ("Net Return Farmer Practice") was cut off mid-word in the source screenshot but is an unambiguous completion, not a guess. */
       leaf("drmr-details", "DRMR Details", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("drmrDetail"),
         { key: "varietiesUsedInIp", label: "Varieties Used in IP", required: true },
         {
           key: "situations",
@@ -2819,6 +2846,7 @@ const projects = group(
     group("cra", "Climate Resilient Agriculture (CRA)", [
       leaf("cra-details", "CRA Details", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("craDetail"),
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "technologyDemonstrated", label: "Technology Demonstrated", required: true },
         { key: "croppingSystem", label: "Cropping System", required: true, sourceMaster: { master: "cropping-system", optionKey: "cropName" } },
@@ -2897,6 +2925,7 @@ const projects = group(
     group("seed-hub", "Seed Hub Program", [
       leaf("seed-hub-program", "Seed Hub Program", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("seedHubProgram"),
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "cropName", label: "Crop Name", required: true },
         { key: "variety", label: "Variety", required: true },
@@ -3078,6 +3107,7 @@ const performanceIndicators = group(
       ]),
       leaf("district-crop-productivity", "Productivity of Major Crops", [
         { key: "kvk", label: "KVK", readonly: true },
+        yearColumn("districtCropProductivity"),
         { key: "season", label: "Season", required: true, sourceMaster: { master: "season", optionKey: "name" } },
         { key: "type", label: "Type", required: true },
         { key: "cropName", label: "Name of Crop", required: true },
@@ -3088,6 +3118,7 @@ const performanceIndicators = group(
       ]),
       leaf("district-monthly-weather", "Mean Yearly Temperature, Rainfall, Humidity", [
         { key: "kvk", label: "KVK", readonly: true },
+        yearColumn("districtMonthlyWeather"),
         { key: "month", label: "Month", required: true, staticOptions: MONTH_OPTIONS },
         { key: "rainfallMm", label: "Rainfall (mm)" },
         { key: "maxTempC", label: "Max. Temp. (°C)", numeric: true },
@@ -3098,6 +3129,7 @@ const performanceIndicators = group(
       ]),
       leaf("district-livestock-production", "Production of Major Livestock Products", [
         { key: "kvk", label: "KVK", readonly: true },
+        yearColumn("districtLivestockProduction"),
         { key: "livestockName", label: "Name of Livestock", required: true },
         { key: "number", label: "Number", required: true },
         { key: "remarks", label: "Remarks" },
@@ -3213,6 +3245,7 @@ const performanceIndicators = group(
       ], "Staff Quarters", undefined, "Staff Quarters", undefined, "Staff Quarters"),
       leaf("rain-water-harvesting", "Rain Water Harvesting structure and micro irrigation system", [
         { key: "kvk", label: "KVK Name", readonly: true },
+        yearColumn("rainWaterHarvesting"),
         {
           key: "trainingProgrammes",
           label: "No of Training Programme Conducted",

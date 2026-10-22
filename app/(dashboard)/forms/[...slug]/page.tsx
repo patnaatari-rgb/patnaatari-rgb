@@ -1347,12 +1347,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.cfldBudgetUtilization.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         crop: r.crop,
         season: r.season,
         overallFundAllocation: String(r.overallFundAllocation),
@@ -1380,11 +1381,12 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.cfldCropWiseImage.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
-        id: r.id, kvk: r.kvk.name, crop: r.crop, image: r.imageUrl })),
+        id: r.id, kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear), crop: r.crop, image: r.imageUrl })),
       totalCount: rows.length,
     };
   } else if (
@@ -1418,12 +1420,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nicraDetails.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         cropName: r.cropName,
         seasonName: r.seasonName,
         technologyDemonstration: r.technologyDemonstration,
@@ -1522,12 +1525,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nicraCustomHiringFarmImplement.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         farmImplementName: r.farmImplementName,
         farmersUsed: String(r.farmersUsed),
         areaCovered: String(r.areaCovered),
@@ -1731,12 +1735,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nfDemonstrationInfo.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         farmerName: r.farmerName,
         activityName: r.activityName,
         crop: r.crop,
@@ -1804,12 +1809,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nfSoilData.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         season: r.season,
         type: r.type,
         crop: r.crop,
@@ -1826,12 +1832,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nfBudgetExpenditure.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         activityName: r.activityName,
         activitiesOrganised: String(r.activitiesOrganised),
         budgetSanction: String(r.budgetSanction),
@@ -1845,12 +1852,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.subPlanActivity.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         type: r.type === "TSP" ? "TSP" : "SCSP",
         activities: r.activities,
         noOfTraining: String(r.noOfTraining),
@@ -1862,12 +1870,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nariNutritionGarden.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         nutriSmartVillage: r.nutriSmartVillage,
         typeOfNutritionalGarden: r.typeOfNutritionalGarden,
         numbers: String(r.numbers),
@@ -1883,12 +1892,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nariBioFortified.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         nutriSmartVillage: r.nutriSmartVillage,
         season: r.season,
         activity: r.activity,
@@ -1904,12 +1914,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nariValueAddition.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         nutriSmartVillage: r.nutriSmartVillage,
         cropName: r.cropName,
         valueAddedProduct: r.valueAddedProduct,
@@ -1925,12 +1936,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nariTraining.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         nutriSmartVillage: r.nutriSmartVillage,
         areaOfTraining: r.areaOfTraining,
         activity: r.activity,
@@ -1946,12 +1958,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.nariExtension.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         nutriSmartVillage: r.nutriSmartVillage,
         activity: r.activity,
         nameOfActivity: r.nameOfActivity,
@@ -2012,12 +2025,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.fpoCbboDetail.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         noOfBlocksAllocated: String(r.noOfBlocksAllocated),
         noOfFposRegistered: String(r.noOfFposRegistered),
         trainingReceived: r.trainingReceived ?? "",
@@ -2049,12 +2063,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.drmrDetail.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         varietiesUsedInIp: r.varietiesUsedInIp,
         situations: r.situations,
         varietiesUsedInFp: r.varietiesUsedInFp,
@@ -2097,7 +2112,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.craDetail.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => {
@@ -2105,6 +2120,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
         return {
           id: r.id,
           kvk: r.kvk.name,
+          reportingYear: String(r.reportingYear),
           season: r.season,
           technologyDemonstrated: r.technologyDemonstrated,
           croppingSystem: r.croppingSystem,
@@ -2162,12 +2178,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.seedHubProgram.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         season: r.season,
         cropName: r.cropName,
         variety: r.variety,
@@ -2310,12 +2327,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.districtCropProductivity.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         season: r.season,
         type: r.type,
         cropName: r.cropName,
@@ -2330,12 +2348,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.districtMonthlyWeather.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         month: r.month,
         rainfallMm: r.rainfallMm != null ? String(r.rainfallMm) : "",
         maxTempC: r.maxTempC != null ? String(r.maxTempC) : "",
@@ -2350,12 +2369,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.districtLivestockProduction.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         livestockName: r.livestockName,
         number: String(r.number),
         remarks: r.remarks ?? "",
@@ -2541,12 +2561,13 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
     const rows = await prisma.rainWaterHarvesting.findMany({
       where: kvkScope,
       include: { kvk: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         kvk: r.kvk.name,
+        reportingYear: String(r.reportingYear),
         trainingProgrammes: String(r.trainingProgrammes),
         demonstrations: String(r.demonstrations),
         plantMaterialProduced: String(r.plantMaterialProduced),

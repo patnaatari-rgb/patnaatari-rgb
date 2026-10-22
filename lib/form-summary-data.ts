@@ -41,6 +41,27 @@ const MODEL_YEAR_FIELD: Record<string, { field: string; kind: "int" | "date" }> 
   entrepreneurshipDetail: { field: "reportingYear", kind: "int" },
   successStory: { field: "reportingYear", kind: "int" },
   districtLevelData: { field: "reportingYear", kind: "int" },
+  districtCropProductivity: { field: "reportingYear", kind: "int" },
+  districtMonthlyWeather: { field: "reportingYear", kind: "int" },
+  districtLivestockProduction: { field: "reportingYear", kind: "int" },
+  rainWaterHarvesting: { field: "reportingYear", kind: "int" },
+  cfldBudgetUtilization: { field: "reportingYear", kind: "int" },
+  cfldCropWiseImage: { field: "reportingYear", kind: "int" },
+  nicraDetails: { field: "reportingYear", kind: "int" },
+  nicraCustomHiringFarmImplement: { field: "reportingYear", kind: "int" },
+  nfDemonstrationInfo: { field: "reportingYear", kind: "int" },
+  nfSoilData: { field: "reportingYear", kind: "int" },
+  nfBudgetExpenditure: { field: "reportingYear", kind: "int" },
+  subPlanActivity: { field: "reportingYear", kind: "int" },
+  nariNutritionGarden: { field: "reportingYear", kind: "int" },
+  nariBioFortified: { field: "reportingYear", kind: "int" },
+  nariValueAddition: { field: "reportingYear", kind: "int" },
+  nariTraining: { field: "reportingYear", kind: "int" },
+  nariExtension: { field: "reportingYear", kind: "int" },
+  fpoCbboDetail: { field: "reportingYear", kind: "int" },
+  drmrDetail: { field: "reportingYear", kind: "int" },
+  craDetail: { field: "reportingYear", kind: "int" },
+  seedHubProgram: { field: "reportingYear", kind: "int" },
   operationalAreaDetail: { field: "reportingYear", kind: "int" },
   villageAdoptionProgramme: { field: "reportingYear", kind: "int" },
   priorityThrustArea: { field: "reportingYear", kind: "int" },
@@ -238,10 +259,8 @@ const LEAF_MODEL_MAP: Record<string, { model: string; extraWhere?: Record<string
   // wired into the government report - lib/report-data.ts) were never added
   // here, so Form Summary silently never counted them: 7 real Productivity
   // rows and 2 real Livestock rows were already invisible before this fix.
-  // None of the 3 models carries a reporting-year column (confirmed against
-  // schema.prisma), so - same as the roster tables noted above - no
-  // yearField entry belongs here either; they count all-time in every
-  // year's view, same as bank/land/staff already do.
+  // All 3 now carry a reportingYear column, so they are scoped by year like
+  // every other leaf (see MODEL_YEAR_FIELD above).
   "performance/district-village-performance/district-crop-productivity": { model: "districtCropProductivity" },
   "performance/district-village-performance/district-monthly-weather": { model: "districtMonthlyWeather" },
   "performance/district-village-performance/district-livestock-production": { model: "districtLivestockProduction" },
