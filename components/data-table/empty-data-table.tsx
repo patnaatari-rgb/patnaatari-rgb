@@ -146,6 +146,8 @@ type EmptyDataTableProps = {
    * `oftFldStatus` so each leaf's toolbar can match its own real reference.
    */
   reportingYearFilter?: boolean;
+  /** Achievements -> Trainings only: adds State and On Campus/Off Campus dropdowns next to the date filters. `states` are the states the signed-in user can pick from; the State dropdown stays hidden unless there are two or more. */
+  trainingFilters?: { states: string[] };
   /** Shown as a note banner above the table - e.g. OFT/FLD's "mark your result as Completed" instruction. */
   note?: string;
   /** Staff Transferred only (real reference action, confirmed 2026-09-01): adds a "View Transfer History" item between Edit and Delete, reading each row's `historyJson` field (a JSON-stringified array of { fromKvk, toKvk, date }) built server-side from every StaffTransfer record for that staff member. */
@@ -185,6 +187,9 @@ type EmptyDataTableProps = {
    */
   onMutated?: () => void;
 };
+
+/** SimpleSelect cannot hold an empty value, so "no filter" is this sentinel. */
+const ALL_OPTION = "__all__";
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
   Ongoing: "bg-[#eaa624]/15 text-[#b5790a] border-[#eaa624]/40",
@@ -241,6 +246,7 @@ export function EmptyDataTable({
   hideAddNew,
   oftFldStatus,
   reportingYearFilter,
+  trainingFilters,
   resultKind,
   note,
   recordPath,
@@ -592,12 +598,15 @@ export function EmptyDataTable({
   const isSimpleMaster =
     showMarkAsOther ?? (columns.length === 1 && columns[0].key === "name");
 
+  const [stateFilter, setStateFilter] = useState("");
+  const [campusFilter, setCampusFilter] = useState("");
+
   const hasActiveDates = fromDate !== "" || toDate !== "";
   const hasActiveColumnFilters = Object.values(columnFilters).some(
     (state) => state.sort !== null || state.selected !== null,
   );
   const hasActiveFilters =
-    hasActiveDates || search !== "" || hasActiveColumnFilters;
+    hasActiveDates || search !== "" || hasActiveColumnFilters || stateFilter !== "" || campusFilter !== "";
 
   function resetDates() {
     setFromDate("");
@@ -609,6 +618,8 @@ export function EmptyDataTable({
     setFromDate("");
     setToDate("");
     setColumnFilters({});
+    setStateFilter("");
+    setCampusFilter("");
   }
 
   /**
@@ -761,6 +772,8 @@ export function EmptyDataTable({
         });
         if (dateColumnKeys.length > 0 && !inRange) return false;
       }
+      if (stateFilter && String(row.state ?? "") !== stateFilter) return false;
+      if (campusFilter && String(row.onCampusOffCampus ?? "") !== campusFilter) return false;
       return Object.entries(columnFilters).every(([key, state]) => {
         if (state.selected === null) return true;
         return state.selected.has(String(row[key] ?? ""));
@@ -779,7 +792,7 @@ export function EmptyDataTable({
       });
     }
     return next;
-  }, [rows, columnFilters, search, columns, reportingYears, hasActiveDates, dateColumnKeys, fromDate, toDate]);
+  }, [rows, columnFilters, search, columns, reportingYears, hasActiveDates, dateColumnKeys, fromDate, toDate, stateFilter, campusFilter]);
 
   /** Flat one-table export - used for Masters, and as the fallback when a mapped Form Management leaf turns out to have no report subsection for the current scope. */
   async function downloadFlat(format: "pdf" | "excel" | "word") {
@@ -1019,6 +1032,9 @@ export function EmptyDataTable({
           .filter(([, s]) => s.selected !== null)
           .map(([key, s]) => [key, Array.from(s.selected as Set<string>)]),
       );
+      // The Trainings State and On Campus/Off Campus dropdowns ride along as column filters; the Training report builder reads both keys.
+      if (stateFilter) activeColumnValues.state = [stateFilter];
+      if (campusFilter) activeColumnValues.onCampusOffCampus = [campusFilter];
       if (Object.keys(activeColumnValues).length > 0) {
         query.set("colf", JSON.stringify(activeColumnValues));
       }
@@ -1094,8 +1110,10 @@ export function EmptyDataTable({
         hasActiveDates,
         fromDate,
         toDate,
+        stateFilter,
+        campusFilter,
       }),
-    [search, columnFilters, reportingYears, hasActiveDates, fromDate, toDate],
+    [search, columnFilters, reportingYears, hasActiveDates, fromDate, toDate, stateFilter, campusFilter],
   );
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
@@ -1281,6 +1299,32 @@ export function EmptyDataTable({
               </span>
             )}
           </div>
+          {trainingFilters && trainingFilters.states.length > 1 && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">State</Label>
+              <SimpleSelect
+                value={stateFilter || ALL_OPTION}
+                onValueChange={(v) => setStateFilter(v === ALL_OPTION ? "" : v)}
+                options={[{ value: ALL_OPTION, label: "All" }, ...trainingFilters.states.map((s) => ({ value: s, label: s }))]}
+                className="h-9 w-36"
+              />
+            </div>
+          )}
+          {trainingFilters && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">On/Off Campus</Label>
+              <SimpleSelect
+                value={campusFilter || ALL_OPTION}
+                onValueChange={(v) => setCampusFilter(v === ALL_OPTION ? "" : v)}
+                options={[
+                  { value: ALL_OPTION, label: "All" },
+                  { value: "On Campus", label: "On Campus" },
+                  { value: "Off Campus", label: "Off Campus" },
+                ]}
+                className="h-9 w-36"
+              />
+            </div>
+          )}
           <Button
             variant="default"
             size="lg"

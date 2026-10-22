@@ -427,6 +427,8 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
    * renders the placeholder table until its own turn.
    */
   let formData: { rows: Record<string, string>[]; totalCount: number } | undefined;
+  /** Achievements -> Trainings only: the states the State dropdown offers (see EmptyDataTable `trainingFilters`). */
+  let trainingStates: string[] = [];
   const user = node.type === "leaf" ? await getCurrentUser() : null;
   const scopedKvkId = user && user.role !== "SUPER_ADMIN" ? (user.kvkId ?? undefined) : undefined;
   /**
@@ -889,16 +891,21 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
   } else if (user && node.type === "leaf" && node.slug === "trainings") {
     const rows = await prisma.training.findMany({
       where: kvkScope,
-      include: { kvk: true },
+      include: { kvk: { include: { state: true } } },
       orderBy: [{ reportingYear: "desc" }, { createdAt: "desc" }],
     });
     const imagesByRecord = await moduleImagesByRecord(rows.map((r) => r.id));
+    // A Super Admin picks from every state of the zone; a KVK or Host Organisation account only from the states its own rows are in.
+    trainingStates = user.role === "SUPER_ADMIN"
+      ? (await prisma.state.findMany({ where: { zoneId: user.zoneId }, orderBy: { name: "asc" }, select: { name: true } })).map((s) => s.name)
+      : [...new Set(rows.map((r) => r.kvk.state.name))].sort();
     formData = {
       rows: rows.map((r) => ({
         id: r.id,
         moduleImages: JSON.stringify(imagesByRecord.get(r.id) ?? []),
         reportingYear: String(r.reportingYear),
         kvk: r.kvk.name,
+        state: r.kvk.state.name,
         startDate: fmtDate(r.startDate),
         endDate: fmtDate(r.endDate),
         title: r.title,
@@ -3093,6 +3100,7 @@ export default async function FormsPage({ params, searchParams }: FormsPageProps
           oftFldStatus={OFT_FLD_STATUS_SLUGS.has(node.slug)}
           /** OFT's list toolbar has a real "Reporting Year" filter (client-confirmed default-to-current-year); FLD's own reference toolbar does not have one at all (audit finding, 2026-09-02 - was silently hiding real non-current-year FLD data with no visible control explaining why). */
           reportingYearFilter={node.slug === "oft"}
+          trainingFilters={node.slug === "trainings" ? { states: trainingStates } : undefined}
           resultKind={node.slug === "view-fld" ? "fld" : node.slug === "oft" ? "oft" : undefined}
           staffTransferHistory={node.slug === "staff-transferred"}
           staffTransfer={node.slug === "employee-details"}

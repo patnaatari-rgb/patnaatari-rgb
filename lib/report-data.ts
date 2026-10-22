@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { buildTrainingChainResolver } from "@/lib/training-chain";
 import { MONTH_NAMES } from "@/lib/months";
 import { modelDelegate, type DynamicRow } from "@/lib/prisma-delegate";
 import { NF_COMPARISON_PARAMETERS, applyListFilter } from "./report-types";
@@ -1796,8 +1797,17 @@ const VIP_CASTE_SELECT = {
  * for the two consolidate tables is near-identical in structure - grouping
  * fields read literally from the titles; flagged for the client to confirm.)
  */
+/** Thematic areas the 2.4.A report always lists under a Crop Production band, with zero counts when there is no training yet. */
+const CROP_PRODUCTION_PINNED_THEMATIC = [
+  "Micro Irrigation",
+  "Soil and Water Conservation",
+  "Integrated Nutrient Management",
+  "Post Harvest Technology",
+  "Production of Organic Inputs",
+] as const;
+
 async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
-  const [rawTrainings, states] = await Promise.all([
+  const [rawTrainings, states, typeMasters, areaMasters, themeMasters] = await Promise.all([
     prisma.training.findMany({
       where: scopeAndPeriod(scope, "training"),
       select: {
@@ -1809,6 +1819,12 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
       },
     }),
     prisma.state.findMany({ where: { zoneId: scope.zoneId }, orderBy: { name: "asc" } }),
+    prisma.trainingTypeMaster.findMany({ where: { zoneId: scope.zoneId }, select: { name: true } }),
+    prisma.trainingAreaMaster.findMany({ where: { zoneId: scope.zoneId }, select: { name: true, trainingType: { select: { name: true } } } }),
+    prisma.trainingThematicAreaMaster.findMany({
+      where: { zoneId: scope.zoneId },
+      select: { name: true, trainingArea: { select: { name: true, trainingType: { select: { name: true } } } } },
+    }),
   ]);
   type T = (typeof rawTrainings)[number];
   // Real bug fix, 2026-09-14: this table is built entirely from `blocks`
@@ -1817,7 +1833,9 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
   // Trainings list always downloaded every record. Field keys match the
   // list's own column keys exactly (page.tsx's "trainings" row mapping).
   const dateStr = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
-  const trainings = applyListFilter(rawTrainings, scope, {
+  // The State dropdown of the Trainings list arrives as a column filter on `state`; it is not a list column, so applyListFilter has no accessor for it.
+  const pickedStates = scope.listFilter?.columnValues?.state?.length ? new Set(scope.listFilter.columnValues.state) : null;
+  const trainings = applyListFilter(pickedStates ? rawTrainings.filter((t) => pickedStates.has(t.kvk.state.name)) : rawTrainings, scope, {
     reportingYear: (t: T) => String(t.reportingYear),
     kvk: (t: T) => t.kvk.name,
     startDate: (t: T) => dateStr(t.startDate),
@@ -1850,7 +1868,7 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
     ...casteMftColumns("No. of Participants"),
   ];
   const stateRowFor = (list: T[]) => ({ courses: String(list.length), ...casteMftRow(list) });
-  const stateRows = states.map((st) => ({ row: st.name, ...stateRowFor(trainings.filter((t) => t.kvk.state.name === st.name)) }));
+  const stateRows = (pickedStates ? states.filter((st) => pickedStates.has(st.name)) : states).map((st) => ({ row: st.name, ...stateRowFor(trainings.filter((t) => t.kvk.state.name === st.name)) }));
 
   // --- Consolidate: outer -> Training Area -> Thematic Area (+ Sub Total) ---
   const consolidateColumns: ReportColumn[] = [
@@ -1859,6 +1877,20 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
     ...casteMftColumns("No. of Participants"),
   ];
   const label = (v: string | null) => v?.trim() || "Not specified";
+  // A name typed under "Other" in the Add form is saved as typed, so the data holds Types, Areas and
+  // Thematic Areas the masters never had; the consolidate tables show only what the masters define and
+  // group the rest under "Other".
+  const chainOf = buildTrainingChainResolver({
+    types: typeMasters.map((m) => m.name),
+    areas: areaMasters.map((m) => ({ type: m.trainingType.name, name: m.name })),
+    themes: themeMasters.map((m) => ({ type: m.trainingArea.trainingType.name, area: m.trainingArea.name, name: m.name })),
+  });
+  /** Pinned thematic areas missing from a Crop Production band; they get a zero row so the band is always complete. */
+  const missingPinned = (area: string, present: Iterable<string>): string[] => {
+    if (area !== "Crop Production") return [];
+    const have = new Set(present);
+    return CROP_PRODUCTION_PINNED_THEMATIC.filter((name) => !have.has(name));
+  };
 
   /**
    * super-v2-prod.pdf p.38-39: each `outerField` value ("Farmers and Farm
@@ -1868,12 +1900,16 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
    */
   const consolidateBlocks = (outerField: "trainingType" | "clientele"): ReportBlock[] => {
     const blocks: ReportBlock[] = [];
-    for (const [outer, outerRows] of groupInto(trainings, (t) => label(t[outerField]))) {
+    for (const [outer, outerRows] of groupInto(trainings, (t) => (outerField === "trainingType" ? chainOf(t).type : label(t.clientele)))) {
       const rows: Record<string, string>[] = [];
-      for (const [area, areaRows] of groupInto(outerRows, (t) => label(t.trainingArea))) {
+      for (const [area, areaRows] of groupInto(outerRows, (t) => chainOf(t).area)) {
         rows.push({ row: area });
-        for (const [thematic, tRows] of groupInto(areaRows, (t) => label(t.thematicArea))) {
+        const thematicGroups = groupInto(areaRows, (t) => chainOf(t).thematic);
+        for (const [thematic, tRows] of thematicGroups) {
           rows.push({ row: thematic, courses: String(tRows.length), ...casteMftRow(tRows) });
+        }
+        for (const thematic of missingPinned(area, thematicGroups.keys())) {
+          rows.push({ row: thematic, courses: "0", ...casteMftRow([]) });
         }
         rows.push({ row: "Sub Total", courses: String(areaRows.length), ...casteMftRow(areaRows) });
       }
@@ -1919,12 +1955,16 @@ async function buildTrainings(scope: ReportScope): Promise<CustomTableResult> {
     ];
     const rowFor = (list: T[]) => ({ ...campusCells(list.filter(isOn), "on"), ...campusCells(list.filter((t) => !isOn(t)), "off") });
     const blocks: ReportBlock[] = [];
-    for (const [outer, outerRows] of groupInto(trainings, (t) => label(t.trainingType))) {
+    for (const [outer, outerRows] of groupInto(trainings, (t) => chainOf(t).type)) {
       const rows: Record<string, string>[] = [];
-      for (const [area, areaRows] of groupInto(outerRows, (t) => label(t.trainingArea))) {
+      for (const [area, areaRows] of groupInto(outerRows, (t) => chainOf(t).area)) {
         rows.push({ row: area });
-        for (const [thematic, tRows] of groupInto(areaRows, (t) => label(t.thematicArea))) {
+        const thematicGroups = groupInto(areaRows, (t) => chainOf(t).thematic);
+        for (const [thematic, tRows] of thematicGroups) {
           rows.push({ row: thematic, ...rowFor(tRows) });
+        }
+        for (const thematic of missingPinned(area, thematicGroups.keys())) {
+          rows.push({ row: thematic, ...rowFor([]) });
         }
         rows.push({ row: "Sub Total", ...rowFor(areaRows) });
       }
